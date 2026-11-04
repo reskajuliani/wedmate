@@ -60,13 +60,16 @@ export default async function CustomerLayout({
     }
 
     if (!userRole) {
-      userRole = cookieStore.get('wedmate_user_role')?.value || cookieStore.get('wedmate_role')?.value || null;
+      const rawRole = cookieStore.get('wedmate_user_role')?.value || cookieStore.get('wedmate_role')?.value;
+      userRole = rawRole ? rawRole.toUpperCase() : null;
       userStatus =
         cookieStore.get('wedmate_user_approval_status')?.value ||
         cookieStore.get('wedmate_user_status')?.value ||
         cookieStore.get('wedmate_status')?.value ||
         null;
       userId = cookieStore.get('wedmate_user_id')?.value || null;
+    } else {
+      userRole = userRole.toUpperCase();
     }
   }
 

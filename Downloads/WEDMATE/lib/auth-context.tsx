@@ -64,22 +64,29 @@ function syncAuthCookies(user: UserProfile | null) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [activeUserId, setActiveUserId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [activeUserId, setActiveUserId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem(AUTH_STORAGE_KEY);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Initialize from localStorage or default to guest on first mount
+  // Fallback sync from localStorage on client mount if needed
   useEffect(() => {
     try {
       const savedId = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (savedId) {
+      if (savedId && savedId !== activeUserId) {
         setActiveUserId(savedId);
       }
     } catch {
       // ignore
-    } finally {
-      setIsLoading(false);
     }
-  }, []);
+  }, [activeUserId]);
 
   // Listen for changes in demoStore (e.g. when admin approves or rejects the current user)
   const [storeVersion, setStoreVersion] = useState(0);
@@ -95,9 +102,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return demoStore.getUserById(activeUserId) || null;
   }, [activeUserId, storeVersion]);
 
-  // Sync cookies whenever currentUser changes
+  // Sync cookies whenever currentUser changes (STRICTLY ONLY when currentUser is non-null)
   useEffect(() => {
-    syncAuthCookies(currentUser);
+    if (currentUser) {
+      syncAuthCookies(currentUser);
+    }
   }, [currentUser]);
 
   const refreshUser = useCallback(() => {
@@ -178,7 +187,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem(AUTH_STORAGE_KEY);
     }
     syncAuthCookies(null);
-    router.push('/');
+    if (typeof window !== 'undefined') {
+      window.location.assign('/');
+    } else {
+      router.push('/');
+    }
   }, [router]);
 
   const switchRole = useCallback(

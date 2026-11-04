@@ -56,10 +56,9 @@ function RegisterContent() {
       // Once approved by admin, customer proceeds to booking.
 
       // Role is CUSTOMER and status is PENDING -> redirect to /approval-pending
-      router.push('/approval-pending');
+      window.location.assign('/approval-pending');
     } catch (err: any) {
       setError(err?.message || 'Gagal mendaftar. Silakan coba kembali.');
-    } finally {
       setLoading(false);
     }
   };

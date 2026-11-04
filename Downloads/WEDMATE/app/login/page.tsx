@@ -25,26 +25,33 @@ function LoginContent() {
 
     try {
       const user = await login(email, password);
+      let targetUrl = '/admin/approvals';
+
       if (user.role === 'ADMIN') {
         if (redirectParam && redirectParam.startsWith('/admin')) {
-          router.push(redirectParam);
+          targetUrl = redirectParam;
         } else {
-          router.push('/admin/approvals');
+          targetUrl = '/admin/approvals';
         }
       } else if (user.status === 'APPROVED' || user.approval_status === 'APPROVED') {
         if (packageParam) {
-          router.push(`/customer/booking?packageId=${packageParam}`);
+          targetUrl = `/customer/booking?packageId=${packageParam}`;
         } else if (redirectParam) {
-          router.push(redirectParam);
+          targetUrl = redirectParam;
         } else {
-          router.push('/customer/booking');
+          targetUrl = '/customer/booking';
         }
       } else {
-        router.push('/approval-pending');
+        targetUrl = '/approval-pending';
       }
+
+      // Hard navigation using window.location.assign:
+      // 1. Immediately sends fresh HTTP headers with document.cookie to the server
+      // 2. Completely bypasses stale Next.js router cache or prefetched redirect loops
+      // 3. Guarantees immediate page paint of the target dashboard
+      window.location.assign(targetUrl);
     } catch (err: any) {
       setError(err?.message || 'Gagal login. Periksa kembali email dan kata sandi Anda.');
-    } finally {
       setLoading(false);
     }
   };
@@ -112,7 +119,7 @@ function LoginContent() {
             className="w-full py-3.5 px-4 rounded-xl bg-champagne hover:bg-champagne-600 text-white font-semibold text-sm shadow-wedding flex items-center justify-center gap-2 transition disabled:opacity-60 cursor-pointer"
           >
             <LogIn className="w-4 h-4" />
-            <span>{loading ? 'Memproses...' : 'Masuk Sekarang'}</span>
+            <span>{loading ? 'Mengalihkan ke beranda...' : 'Masuk Sekarang'}</span>
           </button>
         </form>
 
