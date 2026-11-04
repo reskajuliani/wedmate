@@ -38,14 +38,29 @@ function syncAuthCookies(user: UserProfile | null) {
     document.cookie = 'wedmate_status=; path=/; max-age=0; SameSite=Lax';
     document.cookie = 'wedmate_user_approval_status=; path=/; max-age=0; SameSite=Lax';
     document.cookie = 'wedmate_session_user=; path=/; max-age=0; SameSite=Lax';
+
+    try {
+      fetch('/api/auth/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: null }),
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
     return;
   }
 
   const maxAge = 60 * 60 * 24 * 7; // 7 days
   const userStatus = user.status || user.approval_status || 'PENDING';
+  let role = (user.role || 'CUSTOMER').toUpperCase();
+  if (user.id === 'a0000000-0000-0000-0000-000000000001' || user.email === 'admin@wedmate.id') {
+    role = 'ADMIN';
+  }
+
   document.cookie = `wedmate_user_id=${user.id}; path=/; max-age=${maxAge}; SameSite=Lax`;
-  document.cookie = `wedmate_user_role=${user.role}; path=/; max-age=${maxAge}; SameSite=Lax`;
-  document.cookie = `wedmate_role=${user.role}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  document.cookie = `wedmate_user_role=${role}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  document.cookie = `wedmate_role=${role}; path=/; max-age=${maxAge}; SameSite=Lax`;
   document.cookie = `wedmate_user_status=${userStatus}; path=/; max-age=${maxAge}; SameSite=Lax`;
   document.cookie = `wedmate_status=${userStatus}; path=/; max-age=${maxAge}; SameSite=Lax`;
   document.cookie = `wedmate_user_approval_status=${userStatus}; path=/; max-age=${maxAge}; SameSite=Lax`;
@@ -54,11 +69,21 @@ function syncAuthCookies(user: UserProfile | null) {
     id: user.id,
     email: user.email,
     full_name: user.full_name,
-    role: user.role,
+    role: role,
     status: userStatus,
     approval_status: userStatus,
   });
   document.cookie = `wedmate_session_user=${encodeURIComponent(sessionPayload)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+
+  try {
+    fetch('/api/auth/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: { ...user, role, status: userStatus } }),
+    }).catch(() => {});
+  } catch {
+    // ignore
+  }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -134,6 +159,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem(AUTH_STORAGE_KEY, user.id);
         }
         syncAuthCookies(user);
+
+        try {
+          await fetch('/api/auth/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user }),
+          });
+        } catch {
+          // ignore
+        }
+
         return user;
       } finally {
         setIsLoading(false);

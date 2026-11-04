@@ -10,7 +10,43 @@ export const dynamic = 'force-dynamic';
 export default async function WelcomeScreen() {
   const cookieStore = await cookies();
 
-  // Jika sudah login, langsung lempar ke dalam aplikasi
+  // 1. Periksa sesi cookie WEDMATE terlebih dahulu
+  const sessionCookie = cookieStore.get('wedmate_session_user')?.value;
+  if (sessionCookie) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(sessionCookie));
+      if (parsed.role === 'ADMIN' || parsed.id === 'a0000000-0000-0000-0000-000000000001' || parsed.email === 'admin@wedmate.id') {
+        redirect('/admin/approvals');
+      } else if (parsed.status === 'APPROVED' || parsed.approval_status === 'APPROVED') {
+        redirect('/customer/booking');
+      } else {
+        redirect('/approval-pending');
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const roleCookie =
+    cookieStore.get('wedmate_user_role')?.value ||
+    cookieStore.get('wedmate_role')?.value;
+  const statusCookie =
+    cookieStore.get('wedmate_user_status')?.value ||
+    cookieStore.get('wedmate_user_approval_status')?.value ||
+    cookieStore.get('wedmate_status')?.value;
+  const userIdCookie = cookieStore.get('wedmate_user_id')?.value;
+
+  if (roleCookie === 'ADMIN' || userIdCookie === 'a0000000-0000-0000-0000-000000000001') {
+    redirect('/admin/approvals');
+  } else if (roleCookie === 'CUSTOMER') {
+    if (statusCookie === 'APPROVED') {
+      redirect('/customer/booking');
+    } else {
+      redirect('/approval-pending');
+    }
+  }
+
+  // 2. Periksa Supabase Auth jika belum terdeteksi dari cookie
   if (isSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
@@ -18,51 +54,20 @@ export default async function WelcomeScreen() {
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, approval_status')
           .eq('id', user.id)
           .single();
 
         if (profile?.role === 'ADMIN') {
           redirect('/admin/approvals');
-        } else {
-          redirect('/customer/booking');
-        }
-      }
-    } catch {
-      // ignore
-    }
-  } else {
-    const sessionCookie = cookieStore.get('wedmate_session_user')?.value;
-    if (sessionCookie) {
-      try {
-        const parsed = JSON.parse(decodeURIComponent(sessionCookie));
-        if (parsed.role === 'ADMIN') {
-          redirect('/admin/approvals');
-        } else if (parsed.status === 'APPROVED' || parsed.approval_status === 'APPROVED') {
+        } else if (profile?.approval_status === 'APPROVED') {
           redirect('/customer/booking');
         } else {
           redirect('/approval-pending');
         }
-      } catch {
-        // ignore
       }
-    }
-    const roleCookie =
-      cookieStore.get('wedmate_user_role')?.value ||
-      cookieStore.get('wedmate_role')?.value;
-    const statusCookie =
-      cookieStore.get('wedmate_user_status')?.value ||
-      cookieStore.get('wedmate_user_approval_status')?.value ||
-      cookieStore.get('wedmate_status')?.value;
-
-    if (roleCookie === 'ADMIN') {
-      redirect('/admin/approvals');
-    } else if (roleCookie === 'CUSTOMER') {
-      if (statusCookie === 'APPROVED') {
-        redirect('/customer/booking');
-      } else {
-        redirect('/approval-pending');
-      }
+    } catch {
+      // ignore
     }
   }
 

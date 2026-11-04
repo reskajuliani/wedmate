@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
-
 import { CustomerHeader } from '@/components/CustomerHeader';
 
 export const metadata = {
@@ -18,13 +17,40 @@ export default async function CustomerLayout({
 }) {
   const cookieStore = await cookies();
 
-  // Layer 2: Server Component Guard - Direct Database & Session Verification
   let userId: string | null = null;
   let userRole: string | null = null;
   let userStatus: string | null = null;
 
-  // 1. Check Supabase Server Auth & Database profile
-  if (isSupabaseConfigured()) {
+  // 1. Prioritas Pertama: Ekstraksi Sesi Cookie WEDMATE
+  const sessionCookie = cookieStore.get('wedmate_session_user')?.value;
+  if (sessionCookie) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(sessionCookie));
+      if (parsed) {
+        userId = parsed.id;
+        userRole = parsed.role ? parsed.role.toUpperCase() : null;
+        userStatus = parsed.approval_status || parsed.status;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!userRole) {
+    const rawRole =
+      cookieStore.get('wedmate_user_role')?.value ||
+      cookieStore.get('wedmate_role')?.value;
+    userRole = rawRole ? rawRole.toUpperCase() : null;
+    userStatus =
+      cookieStore.get('wedmate_user_approval_status')?.value ||
+      cookieStore.get('wedmate_user_status')?.value ||
+      cookieStore.get('wedmate_status')?.value ||
+      null;
+    userId = cookieStore.get('wedmate_user_id')?.value || null;
+  }
+
+  // 2. Jika tidak ada sesi cookie dan Supabase terkonfigurasi, periksa Supabase Auth
+  if (!userRole && isSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -38,38 +64,12 @@ export default async function CustomerLayout({
           .single();
 
         if (profile) {
-          userRole = profile.role;
+          userRole = profile.role ? profile.role.toUpperCase() : null;
           userStatus = profile.approval_status || profile.status;
         }
       }
     } catch {
-      // In Supabase mode, failed auth strictly means unauthenticated
-    }
-  } else {
-    // 2. Standalone / Demo Store Mode: Read cookies
-    const sessionCookie = cookieStore.get('wedmate_session_user')?.value;
-    if (sessionCookie) {
-      try {
-        const parsed = JSON.parse(decodeURIComponent(sessionCookie));
-        userId = parsed.id;
-        userRole = parsed.role;
-        userStatus = parsed.approval_status || parsed.status;
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!userRole) {
-      const rawRole = cookieStore.get('wedmate_user_role')?.value || cookieStore.get('wedmate_role')?.value;
-      userRole = rawRole ? rawRole.toUpperCase() : null;
-      userStatus =
-        cookieStore.get('wedmate_user_approval_status')?.value ||
-        cookieStore.get('wedmate_user_status')?.value ||
-        cookieStore.get('wedmate_status')?.value ||
-        null;
-      userId = cookieStore.get('wedmate_user_id')?.value || null;
-    } else {
-      userRole = userRole.toUpperCase();
+      // ignore
     }
   }
 

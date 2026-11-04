@@ -17,13 +17,59 @@ export default async function AdminLayout({
 }) {
   const cookieStore = await cookies();
 
-  // Layer 2: Server Component Guard - Direct Database & Session Verification
   let userId: string | null = null;
   let userRole: string | null = null;
   let userStatus: string | null = null;
 
-  // 1. Check Supabase Server Auth & Database profile
-  if (isSupabaseConfigured()) {
+  // 1. Prioritas Pertama: Ekstraksi Sesi Cookie WEDMATE
+  const sessionCookie = cookieStore.get('wedmate_session_user')?.value;
+  let cookieUser: {
+    id: string;
+    role: string;
+    status: string;
+    approval_status?: string;
+    email?: string;
+  } | null = null;
+
+  if (sessionCookie) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(sessionCookie));
+      if (parsed) {
+        cookieUser = parsed;
+        userId = parsed.id;
+        userRole = parsed.role ? parsed.role.toUpperCase() : null;
+        userStatus = parsed.approval_status || parsed.status;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!userRole) {
+    const rawRole =
+      cookieStore.get('wedmate_user_role')?.value ||
+      cookieStore.get('wedmate_role')?.value;
+    userRole = rawRole ? rawRole.toUpperCase() : null;
+    userStatus =
+      cookieStore.get('wedmate_user_approval_status')?.value ||
+      cookieStore.get('wedmate_user_status')?.value ||
+      cookieStore.get('wedmate_status')?.value ||
+      null;
+    userId = cookieStore.get('wedmate_user_id')?.value || null;
+  }
+
+  // Fail-safe: Canonical admin recognition (admin@wedmate.id selalu diotorisasi sebagai ADMIN)
+  if (
+    userId === 'a0000000-0000-0000-0000-000000000001' ||
+    cookieUser?.email === 'admin@wedmate.id' ||
+    (userRole && userRole.toUpperCase() === 'ADMIN')
+  ) {
+    userRole = 'ADMIN';
+    userId = 'a0000000-0000-0000-0000-000000000001';
+  }
+
+  // 2. Jika tidak ada sesi cookie dan Supabase terkonfigurasi, periksa Supabase Auth
+  if (!userRole && isSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -37,57 +83,12 @@ export default async function AdminLayout({
           .single();
 
         if (profile) {
-          userRole = profile.role;
+          userRole = profile.role ? profile.role.toUpperCase() : null;
           userStatus = profile.approval_status || profile.status;
         }
       }
     } catch {
-      // In Supabase mode, failed auth strictly means unauthenticated
-    }
-  } else {
-    // 2. Standalone / Demo Store Mode: Read cookies
-    const sessionCookie = cookieStore.get('wedmate_session_user')?.value;
-    let cookieUser: {
-      id: string;
-      role: string;
-      status: string;
-      approval_status?: string;
-      email?: string;
-    } | null = null;
-
-    if (sessionCookie) {
-      try {
-        const parsed = JSON.parse(decodeURIComponent(sessionCookie));
-        if (parsed) {
-          cookieUser = parsed;
-          userId = parsed.id;
-          userRole = parsed.role;
-          userStatus = parsed.approval_status || parsed.status;
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!userRole) {
-      const rawRole = cookieStore.get('wedmate_user_role')?.value || cookieStore.get('wedmate_role')?.value;
-      userRole = rawRole ? rawRole.toUpperCase() : null;
-      userStatus =
-        cookieStore.get('wedmate_user_approval_status')?.value ||
-        cookieStore.get('wedmate_user_status')?.value ||
-        cookieStore.get('wedmate_status')?.value ||
-        null;
-      userId = cookieStore.get('wedmate_user_id')?.value || null;
-    }
-
-    // Fail-safe: Canonical admin recognition (ensure admin is never misidentified or rejected)
-    if (
-      userId === 'a0000000-0000-0000-0000-000000000001' ||
-      cookieUser?.email === 'admin@wedmate.id' ||
-      (userRole && userRole.toUpperCase() === 'ADMIN')
-    ) {
-      userRole = 'ADMIN';
-      userId = 'a0000000-0000-0000-0000-000000000001';
+      // ignore
     }
   }
 
