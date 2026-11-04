@@ -1,0 +1,908 @@
+'use client';
+
+import React, { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth-context';
+import { demoStore } from '@/lib/demo-store';
+import { UserProfile, AccountStatus, Booking, BookingStatus } from '@/lib/types';
+import { formatRupiah, formatDateIndo, formatDateTimeIndo } from '@/lib/utils';
+import {
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Search,
+  Filter,
+  Users,
+  Calendar,
+  CalendarDays,
+  Phone,
+  Mail,
+  AlertTriangle,
+  RotateCcw,
+  Package,
+  MapPin,
+  Eye,
+  Check,
+  X,
+  Sparkles,
+  ArrowRight,
+  ListTodo,
+  CreditCard,
+} from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
+import { EventScheduleCalendar } from '@/components/admin/EventScheduleCalendar';
+
+function AdminApprovalsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const { user } = useAuth();
+  const adminId = user?.id || 'a0000000-0000-0000-0000-000000000001';
+
+  // Active Main Tab: 'accounts' | 'bookings' | 'calendar'
+  const [activeMainTab, setActiveMainTab] = useState<'accounts' | 'bookings' | 'calendar'>(
+    tabParam === 'bookings' ? 'bookings' : tabParam === 'calendar' ? 'calendar' : 'accounts'
+  );
+
+  useEffect(() => {
+    if (tabParam === 'bookings') {
+      setActiveMainTab('bookings');
+    } else if (tabParam === 'calendar') {
+      setActiveMainTab('calendar');
+    } else if (tabParam === 'accounts') {
+      setActiveMainTab('accounts');
+    }
+  }, [tabParam]);
+
+  // --- ACCOUNTS STATE ---
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [accountStatusFilter, setAccountStatusFilter] = useState<'ALL' | AccountStatus>('ALL');
+  const [accountSearch, setAccountSearch] = useState('');
+  const [rejectModalUser, setRejectModalUser] = useState<UserProfile | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // --- BOOKINGS STATE ---
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookingStatusFilter, setBookingStatusFilter] = useState<'ALL' | BookingStatus>('ALL');
+  const [bookingSearch, setBookingSearch] = useState('');
+  const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
+  const [cancelBookingTarget, setCancelBookingTarget] = useState<Booking | null>(null);
+  const [cancelBookingReason, setCancelBookingReason] = useState('');
+
+  // Toast Feedback
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // Subscribe to demoStore updates
+  useEffect(() => {
+    const refreshData = () => {
+      const allCustomers = demoStore.getUsers().filter((u) => u.role === 'CUSTOMER');
+      setUsers(allCustomers);
+      setBookings(demoStore.getBookings());
+    };
+
+    refreshData();
+    const unsub = demoStore.subscribe(refreshData);
+    return unsub;
+  }, []);
+
+  // Pending counts
+  const pendingAccountsCount = users.filter((u) => u.status === 'PENDING').length;
+  const pendingBookingsCount = bookings.filter((b) => b.status === 'PENDING').length;
+
+  // --- ACCOUNT ACTIONS ---
+  const handleApproveAccount = (targetUser: UserProfile) => {
+    demoStore.updateUserStatus(targetUser.id, 'APPROVED');
+    showToast(`Akun ${targetUser.full_name} berhasil DISETUJUI! Customer kini dapat login ke portal.`);
+  };
+
+  const handleOpenRejectAccount = (targetUser: UserProfile) => {
+    setRejectModalUser(targetUser);
+    setRejectReason('Data kontak atau tanggal pernikahan belum valid.');
+  };
+
+  const handleConfirmRejectAccount = () => {
+    if (!rejectModalUser) return;
+    demoStore.updateUserStatus(rejectModalUser.id, 'REJECTED', rejectReason.trim());
+    showToast(`Pendaftaran akun ${rejectModalUser.full_name} DITOLAK.`);
+    setRejectModalUser(null);
+  };
+
+  // --- BOOKING ACTIONS ---
+  const handleConfirmBooking = (target: Booking | string) => {
+    const booking = typeof target === 'string' ? bookings.find((b) => b.id === target) : target;
+    if (!booking) return;
+    try {
+      const result = demoStore.confirmBooking(booking.id, adminId);
+      showToast(
+        `Booking ${booking.id} berhasil DIKONFIRMASI! Proyek checklist dan invoice pembayaran otomatis diterbitkan.`
+      );
+    } catch (err: any) {
+      showToast(err.message || 'Gagal mengonfirmasi booking.', 'error');
+    }
+  };
+
+  const handleOpenCancelBooking = (booking: Booking) => {
+    setCancelBookingTarget(booking);
+    setCancelBookingReason('Jadwal bentrok atau kuota layanan pada tanggal tersebut penuh.');
+  };
+
+  const openRejectBookingModal = (booking: Booking) => {
+    if (booking) {
+      handleOpenCancelBooking(booking);
+    }
+  };
+
+  const handleConfirmCancelBooking = () => {
+    if (!cancelBookingTarget) return;
+    demoStore.cancelBooking(cancelBookingTarget.id, cancelBookingReason.trim());
+    showToast(`Pengajuan booking ${cancelBookingTarget.id} berhasil DIBATALKAN.`);
+    setCancelBookingTarget(null);
+  };
+
+  // --- FILTERED DATA ---
+  const filteredUsers = users.filter((u) => {
+    const matchStatus = accountStatusFilter === 'ALL' || u.status === accountStatusFilter;
+    const q = accountSearch.toLowerCase();
+    const matchSearch =
+      !accountSearch ||
+      u.full_name.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q) ||
+      u.phone.includes(q);
+    return matchStatus && matchSearch;
+  });
+
+  const filteredBookings = bookings.filter((b) => {
+    const matchStatus = bookingStatusFilter === 'ALL' || b.status === bookingStatusFilter;
+    const q = bookingSearch.toLowerCase();
+    const customerName = b.customer?.full_name?.toLowerCase() || '';
+    const packageName = b.package?.name?.toLowerCase() || '';
+    const venueName = b.venue_name?.toLowerCase() || '';
+    const matchSearch =
+      !bookingSearch ||
+      b.id.toLowerCase().includes(q) ||
+      customerName.includes(q) ||
+      packageName.includes(q) ||
+      venueName.includes(q);
+    return matchStatus && matchSearch;
+  });
+
+  return (
+    <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Work Screen Header */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8DED0] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs uppercase font-semibold text-[#C8A46A] tracking-widest">
+                Pusat Persetujuan Operasional
+              </span>
+              <span className="text-gray-300">•</span>
+              <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Work Screen Tunggal
+              </span>
+            </div>
+            <h1 className="font-serif text-3xl font-bold text-[#333333]">
+              Persetujuan Akun & Pengajuan Booking
+            </h1>
+            <p className="text-xs text-[#333333]/70 mt-1">
+              Kelola verifikasi registrasi akun pengantin baru dan konfirmasi reservasi booking paket pernikahan dalam satu layar kerja terpadu.
+            </p>
+          </div>
+
+          {/* Stat Badges */}
+          <div className="flex items-center gap-3">
+            <div className="bg-[#FAF8F5] border border-[#E8DED0] px-4 py-3 rounded-2xl text-center min-w-[110px]">
+              <span className="text-[10px] uppercase font-semibold text-[#333333]/60 block">
+                Pending Akun
+              </span>
+              <span className="text-xl font-bold font-serif text-amber-600">
+                {pendingAccountsCount}
+              </span>
+            </div>
+            <div className="bg-[#FAF8F5] border border-[#E8DED0] px-4 py-3 rounded-2xl text-center min-w-[110px]">
+              <span className="text-[10px] uppercase font-semibold text-[#333333]/60 block">
+                Pending Booking
+              </span>
+              <span className="text-xl font-bold font-serif text-[#C8A46A]">
+                {pendingBookingsCount}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div
+            className={`p-4 rounded-2xl border text-xs font-semibold flex items-center gap-3 animate-fadeIn shadow-sm ${
+              toastMessage.type === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-red-50 text-red-800 border-red-200'
+            }`}
+          >
+            {toastMessage.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+        )}
+
+        {/* WORK SCREEN TABS */}
+        <div className="flex items-center gap-3 border-b border-[#E8DED0] pb-2">
+          <button
+            onClick={() => {
+              setActiveMainTab('accounts');
+              router.replace('/admin/approvals?tab=accounts');
+            }}
+            className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl font-semibold text-sm transition-all ${
+              activeMainTab === 'accounts'
+                ? 'bg-[#C8A46A] text-white shadow-sm'
+                : 'bg-white text-[#333333]/70 hover:text-[#333333] hover:bg-[#F8F5EF] border border-[#E8DED0]'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Persetujuan Akun</span>
+            {pendingAccountsCount > 0 && (
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                  activeMainTab === 'accounts' ? 'bg-white text-[#C8A46A]' : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {pendingAccountsCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveMainTab('bookings');
+              router.replace('/admin/approvals?tab=bookings');
+            }}
+            className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl font-semibold text-sm transition-all ${
+              activeMainTab === 'bookings'
+                ? 'bg-[#C8A46A] text-white shadow-sm'
+                : 'bg-white text-[#333333]/70 hover:text-[#333333] hover:bg-[#F8F5EF] border border-[#E8DED0]'
+            }`}
+          >
+            <CalendarDays className="w-4 h-4" />
+            <span>Pengajuan Booking</span>
+            {pendingBookingsCount > 0 && (
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                  activeMainTab === 'bookings' ? 'bg-white text-[#C8A46A]' : 'bg-[#C8A46A] text-white'
+                }`}
+              >
+                {pendingBookingsCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveMainTab('calendar');
+              router.replace('/admin/approvals?tab=calendar');
+            }}
+            className={`flex items-center px-6 py-3 rounded-2xl font-semibold text-sm transition-all ${
+              activeMainTab === 'calendar'
+                ? 'bg-[#C8A46A] text-white shadow-sm'
+                : 'bg-white text-[#333333]/70 hover:text-[#333333] hover:bg-[#F8F5EF] border border-[#E8DED0]'
+            }`}
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            <span>Kalender Jadwal Acara</span>
+          </button>
+        </div>
+
+        {/* TAB 1: PERSETUJUAN AKUN */}
+        {activeMainTab === 'accounts' && (
+          <div className="space-y-6">
+            {/* Filter and Search Bar */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E8DED0] flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Status Filter Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+                {(
+                  [
+                    { key: 'ALL', label: 'Semua Akun' },
+                    { key: 'PENDING', label: 'Menunggu Review' },
+                    { key: 'APPROVED', label: 'Disetujui' },
+                    { key: 'REJECTED', label: 'Ditolak' },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setAccountStatusFilter(tab.key)}
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                      accountStatusFilter === tab.key
+                        ? 'bg-[#333333] text-white shadow-xs'
+                        : 'bg-[#F8F5EF] text-[#333333]/70 hover:text-[#333333] border border-[#E8DED0]'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Box */}
+              <div className="relative min-w-[280px]">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={accountSearch}
+                  onChange={(e) => setAccountSearch(e.target.value)}
+                  placeholder="Cari nama, email, no HP..."
+                  className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#F8F5EF] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-[#C8A46A]"
+                />
+              </div>
+            </div>
+
+            {/* Accounts Table or EmptyState */}
+            {filteredUsers.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="Tidak Ada Akun Ditemukan"
+                description={
+                  accountSearch || accountStatusFilter !== 'ALL'
+                    ? 'Tidak ada akun calon pengantin yang cocok dengan kriteria filter saat ini.'
+                    : 'Belum ada pendaftaran akun calon pengantin baru di dalam sistem.'
+                }
+                actionLabel={accountSearch || accountStatusFilter !== 'ALL' ? 'Reset Filter' : undefined}
+                onAction={() => {
+                  setAccountSearch('');
+                  setAccountStatusFilter('ALL');
+                }}
+              />
+            ) : (
+              <div className="bg-white rounded-3xl border border-[#E8DED0] overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#FAF8F5] border-b border-[#E8DED0] text-[#333333]/60 font-semibold uppercase tracking-wider text-[11px]">
+                      <tr>
+                        <th className="py-4 px-6">Calon Pengantin</th>
+                        <th className="py-4 px-6">Kontak</th>
+                        <th className="py-4 px-6">Tanggal Pernikahan</th>
+                        <th className="py-4 px-6">Terdaftar Pada</th>
+                        <th className="py-4 px-6">Status Akun</th>
+                        <th className="py-4 px-6 text-right">Tindakan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E8DED0]">
+                      {filteredUsers.map((item) => (
+                        <tr key={item.id} className="hover:bg-[#FAF8F5]/60 transition">
+                          <td className="py-4 px-6">
+                            <div className="font-semibold text-[#333333] text-sm">{item.full_name}</div>
+                            <span className="text-[10px] text-gray-400 font-mono">ID: {item.id.slice(0, 8)}...</span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-1.5 text-gray-600 mb-1">
+                              <Mail className="w-3.5 h-3.5 text-[#C8A46A]" />
+                              <span>{item.email}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-gray-600">
+                              <Phone className="w-3.5 h-3.5 text-[#C8A46A]" />
+                              <span>{item.phone}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6">
+                            {item.wedding_date ? (
+                              <div className="flex items-center gap-1.5 font-medium text-[#333333]">
+                                <Calendar className="w-3.5 h-3.5 text-[#C8A46A]" />
+                                <span>{formatDateIndo(item.wedding_date)}</span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 italic">Belum ditentukan</span>
+                            )}
+                          </td>
+                          <td className="py-4 px-6 text-gray-500">
+                            {formatDateTimeIndo(item.created_at)}
+                          </td>
+                          <td className="py-4 px-6">
+                            {item.status === 'APPROVED' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                DISETUJUI
+                              </span>
+                            ) : item.status === 'REJECTED' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-800">
+                                <XCircle className="w-3 h-3 text-red-600" />
+                                DITOLAK
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 animate-pulse">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                MENUNGGU REVIEW
+                              </span>
+                            )}
+                            {item.notes && item.status === 'REJECTED' && (
+                              <p className="text-[10px] text-red-700 mt-1 max-w-xs">{item.notes}</p>
+                            )}
+                          </td>
+                          <td className="py-4 px-6 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {item.status === 'PENDING' && (
+                                <>
+                                  <button
+                                    onClick={() => handleApproveAccount(item)}
+                                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition shadow-xs flex items-center gap-1"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Setujui</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenRejectAccount(item)}
+                                    className="px-3 py-1.5 rounded-xl bg-white border border-red-300 hover:bg-red-50 text-red-600 font-semibold text-xs transition flex items-center gap-1"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    <span>Tolak</span>
+                                  </button>
+                                </>
+                              )}
+                              {item.status === 'APPROVED' && (
+                                <button
+                                  onClick={() => handleOpenRejectAccount(item)}
+                                  className="px-3 py-1.5 rounded-xl bg-white border border-[#E8DED0] hover:bg-red-50 hover:text-red-600 text-gray-500 font-medium text-xs transition"
+                                >
+                                  Tangguhkan
+                                </button>
+                              )}
+                              {item.status === 'REJECTED' && (
+                                <button
+                                  onClick={() => handleApproveAccount(item)}
+                                  className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-semibold text-xs transition flex items-center gap-1"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>Setujui Kembali</span>
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: PENGAJUAN BOOKING */}
+        {activeMainTab === 'bookings' && (
+          <div className="space-y-6">
+            {/* Filter and Search Bar */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E8DED0] flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Status Filter Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+                {(
+                  [
+                    { key: 'ALL', label: 'Semua Booking' },
+                    { key: 'PENDING', label: 'Menunggu Review' },
+                    { key: 'CONFIRMED', label: 'Terkonfirmasi' },
+                    { key: 'CANCELLED', label: 'Dibatalkan' },
+                    { key: 'COMPLETED', label: 'Selesai' },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setBookingStatusFilter(tab.key)}
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                      bookingStatusFilter === tab.key
+                        ? 'bg-[#333333] text-white shadow-xs'
+                        : 'bg-[#F8F5EF] text-[#333333]/70 hover:text-[#333333] border border-[#E8DED0]'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Box */}
+              <div className="relative min-w-[280px]">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={bookingSearch}
+                  onChange={(e) => setBookingSearch(e.target.value)}
+                  placeholder="Cari ID, nama klien, paket, gedung..."
+                  className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#F8F5EF] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-[#C8A46A]"
+                />
+              </div>
+            </div>
+
+            {/* Bookings Table or EmptyState */}
+            {filteredBookings.length === 0 ? (
+              <EmptyState
+                icon={CalendarDays}
+                title="Tidak Ada Pengajuan Booking"
+                description={
+                  bookingSearch || bookingStatusFilter !== 'ALL'
+                    ? 'Tidak ada data reservasi booking yang sesuai dengan filter pencarian.'
+                    : 'Belum ada pengajuan booking paket wedding dari pelanggan di dalam sistem.'
+                }
+                actionLabel={bookingSearch || bookingStatusFilter !== 'ALL' ? 'Reset Filter' : undefined}
+                onAction={() => {
+                  setBookingSearch('');
+                  setBookingStatusFilter('ALL');
+                }}
+              />
+            ) : (
+              <div className="space-y-4">
+                {filteredBookings.map((b) => (
+                  <div
+                    key={b.id}
+                    className="bg-white rounded-3xl p-6 border border-[#E8DED0] shadow-xs hover:border-[#C8A46A] transition space-y-4"
+                  >
+                    {/* Top line: ID, status, date */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E8DED0]">
+                      <div className="flex items-center gap-3">
+                        {b.status === 'CONFIRMED' ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            TERKONFIRMASI
+                          </span>
+                        ) : b.status === 'PENDING' ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 animate-pulse">
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            MENUNGGU REVIEW
+                          </span>
+                        ) : b.status === 'CANCELLED' ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                            <XCircle className="w-3.5 h-3.5 text-red-600" />
+                            DIBATALKAN
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                            SELESAI
+                          </span>
+                        )}
+                        <span className="text-xs font-mono text-gray-400">ID: {b.id}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        Diajukan pada: <strong className="text-[#333333]">{formatDateTimeIndo(b.created_at)}</strong>
+                      </span>
+                    </div>
+
+                    {/* Main columns */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                      {/* Col 1: Client */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
+                          Klien Pemesan
+                        </span>
+                        <div className="font-serif text-lg font-bold text-[#333333]">
+                          {b.customer?.full_name || 'Pelanggan'}
+                        </div>
+                        <div className="text-xs text-gray-600 flex items-center gap-1">
+                          <Phone className="w-3.5 h-3.5 text-[#C8A46A]" />
+                          <span>{b.customer?.phone || '-'}</span>
+                        </div>
+                        <div className="text-xs text-gray-600 flex items-center gap-1">
+                          <Mail className="w-3.5 h-3.5 text-[#C8A46A]" />
+                          <span>{b.customer?.email || '-'}</span>
+                        </div>
+                      </div>
+
+                      {/* Col 2: Package */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
+                          Paket Wedding
+                        </span>
+                        <div className="font-serif text-lg font-bold text-[#333333]">
+                          {b.package?.name || 'Paket Pilihan'}
+                        </div>
+                        <div className="text-sm font-bold font-serif text-[#C8A46A]">
+                          {formatRupiah(b.total_price)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Estimasi: {b.guest_count} Tamu Undangan
+                        </div>
+                      </div>
+
+                      {/* Col 3: Date & Venue */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
+                          Jadwal & Lokasi Acara
+                        </span>
+                        <div className="text-xs font-bold text-[#333333] flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-[#C8A46A]" />
+                          <span>{formatDateIndo(b.wedding_date)}</span>
+                        </div>
+                        <div className="text-xs text-gray-600 flex items-start gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-[#C8A46A] shrink-0 mt-0.5" />
+                          <div>
+                            <strong className="block text-[#333333]">{b.venue_name}</strong>
+                            <span className="text-gray-500 line-clamp-1">{b.venue_address}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Col 4: Quick Actions */}
+                      <div className="flex flex-col justify-between gap-3 bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8DED0]">
+                        <div className="text-xs text-gray-500">
+                          {b.status === 'PENDING' ? (
+                            <span className="text-amber-800 font-medium">
+                              Menunggu persetujuan admin untuk aktivasi project checklist & invoice.
+                            </span>
+                          ) : b.status === 'CONFIRMED' ? (
+                            <span className="text-emerald-800 font-medium">
+                              Booking aktif. Proyek checklist dan invoice sudah diterbitkan.
+                            </span>
+                          ) : (
+                            <span className="text-gray-600">Catatan: {b.notes || 'Tidak ada catatan'}</span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2 border-t border-[#E8DED0]">
+                          <button
+                            onClick={() => setDetailBooking(b)}
+                            className="p-2 rounded-xl bg-white border border-[#E8DED0] hover:bg-[#F8F5EF] text-gray-600 transition"
+                            title="Detail Rincian"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+
+                          {b.status === 'PENDING' && (
+                            <>
+                              <button
+                                onClick={() => handleConfirmBooking(b)}
+                                className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition shadow-xs flex items-center justify-center gap-1"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Konfirmasi</span>
+                              </button>
+                              <button
+                                onClick={() => handleOpenCancelBooking(b)}
+                                className="py-2 px-3 rounded-xl bg-white border border-red-300 hover:bg-red-50 text-red-600 font-semibold text-xs transition flex items-center justify-center gap-1"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>Tolak</span>
+                              </button>
+                            </>
+                          )}
+
+                          {b.status === 'CONFIRMED' && (
+                            <div className="flex items-center gap-1.5 w-full">
+                              <Link
+                                href="/admin/projects"
+                                className="flex-1 py-2 px-2.5 rounded-xl bg-[#C8A46A] hover:bg-[#b59157] text-white font-semibold text-xs transition text-center flex items-center justify-center gap-1"
+                              >
+                                <ListTodo className="w-3.5 h-3.5" />
+                                <span>Project</span>
+                              </Link>
+                              <Link
+                                href="/admin/payments"
+                                className="flex-1 py-2 px-2.5 rounded-xl bg-white border border-[#E8DED0] hover:bg-[#F8F5EF] text-[#333333] font-semibold text-xs transition text-center flex items-center justify-center gap-1"
+                              >
+                                <CreditCard className="w-3.5 h-3.5" />
+                                <span>Tagihan</span>
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: KALENDER JADWAL ACARA */}
+        {activeMainTab === 'calendar' && (
+          <EventScheduleCalendar
+            bookings={bookings}
+            onConfirmBooking={handleConfirmBooking}
+            onCancelBooking={(id) => {
+              const found = bookings.find((b) => b.id === id);
+              if (found) openRejectBookingModal(found);
+            }}
+          />
+        )}
+      </div>
+
+      {/* MODAL: Reject Account */}
+      {rejectModalUser && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-[#E8DED0] shadow-xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+              <div className="flex items-center gap-2 text-red-600 font-bold text-base">
+                <AlertTriangle className="w-5 h-5" />
+                <span>Tolak Pendaftaran Akun</span>
+              </div>
+              <button
+                onClick={() => setRejectModalUser(null)}
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600">
+              Anda akan menolak registrasi atas nama{' '}
+              <strong className="text-[#333333]">{rejectModalUser.full_name}</strong>{' '}
+              ({rejectModalUser.email}). Customer tidak dapat mengakses dashboard booking.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#333333]">Alasan Penolakan</label>
+              <textarea
+                rows={3}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Tulis alasan penolakan untuk customer..."
+                className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-red-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setRejectModalUser(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmRejectAccount}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-sm transition"
+              >
+                Tolak Akun Ini
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Cancel Booking */}
+      {cancelBookingTarget && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-[#E8DED0] shadow-xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+              <div className="flex items-center gap-2 text-red-600 font-bold text-base">
+                <AlertTriangle className="w-5 h-5" />
+                <span>Batalkan Pengajuan Booking</span>
+              </div>
+              <button
+                onClick={() => setCancelBookingTarget(null)}
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600">
+              Anda akan membatalkan booking{' '}
+              <strong className="text-[#333333]">#{cancelBookingTarget.id}</strong>{' '}
+              dari klien{' '}
+              <strong className="text-[#333333]">{cancelBookingTarget.customer?.full_name}</strong>.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[#333333]">Alasan Pembatalan</label>
+              <textarea
+                rows={3}
+                value={cancelBookingReason}
+                onChange={(e) => setCancelBookingReason(e.target.value)}
+                placeholder="Tulis alasan pembatalan..."
+                className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-red-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setCancelBookingTarget(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition"
+              >
+                Kembali
+              </button>
+              <button
+                onClick={handleConfirmCancelBooking}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-sm transition"
+              >
+                Batalkan Booking Ini
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Booking Detail */}
+      {detailBooking && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 border border-[#E8DED0] shadow-xl space-y-6">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+              <div>
+                <span className="text-[10px] uppercase font-semibold text-[#C8A46A] tracking-wider block">
+                  Rincian Booking Pernikahan
+                </span>
+                <h3 className="font-serif text-xl font-bold text-[#333333]">
+                  {detailBooking.package?.name}
+                </h3>
+              </div>
+              <button
+                onClick={() => setDetailBooking(null)}
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8DED0]">
+                <span className="text-gray-400 block text-[10px] uppercase font-semibold">Nama Klien</span>
+                <span className="font-bold text-[#333333] text-sm">{detailBooking.customer?.full_name}</span>
+                <span className="block text-gray-500 mt-0.5">{detailBooking.customer?.email}</span>
+                <span className="block text-gray-500">{detailBooking.customer?.phone}</span>
+              </div>
+
+              <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8DED0]">
+                <span className="text-gray-400 block text-[10px] uppercase font-semibold">Nilai Kontrak</span>
+                <span className="font-bold font-serif text-[#C8A46A] text-base">
+                  {formatRupiah(detailBooking.total_price)}
+                </span>
+                <span className="block text-gray-500 mt-0.5">Kapasitas: {detailBooking.guest_count} Tamu</span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-[#FAF8F5] rounded-xl border border-[#E8DED0] text-xs space-y-2">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-[#C8A46A]" />
+                <span className="font-bold text-[#333333]">
+                  Tanggal Acara: {formatDateIndo(detailBooking.wedding_date)}
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-[#C8A46A] shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-[#333333]">{detailBooking.venue_name}</span>
+                  <p className="text-gray-600 mt-0.5">{detailBooking.venue_address}</p>
+                </div>
+              </div>
+            </div>
+
+            {detailBooking.notes && (
+              <div className="p-3 bg-white rounded-xl border border-[#E8DED0] text-xs">
+                <span className="text-gray-400 block text-[10px] uppercase font-semibold mb-1">
+                  Catatan Tambahan dari Klien
+                </span>
+                <p className="text-gray-700">{detailBooking.notes}</p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setDetailBooking(null)}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#333333] text-white hover:bg-black transition"
+              >
+                Tutup Rincian
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function AdminApprovalsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-20 text-center text-xs text-gray-500">
+          Memuat pusat persetujuan...
+        </div>
+      }
+    >
+      <AdminApprovalsContent />
+    </Suspense>
+  );
+}

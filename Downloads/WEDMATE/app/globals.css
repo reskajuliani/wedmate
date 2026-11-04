@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F8F5EF;
+  --foreground: #333333;
+  --champagne: #C8A46A;
+  --ivory: #F8F5EF;
+  --softbeige: #E8DED0;
+  --charcoal: #333333;
+}
+
+body {
+  background-color: #F8F5EF;
+  color: #333333;
+  font-family: var(--font-sans), 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+}
+
+/* Elegant Wedding Typography Hierarchy */
+h1, h2, h3, h4 {
+  font-family: var(--font-serif), 'Playfair Display', Georgia, serif;
+  letter-spacing: -0.015em;
+}
+
+button, input, select, textarea, label {
+  font-family: var(--font-sans), 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Custom scrollbar with elegant champagne tint */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F8F5EF;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C8A46A;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B38C4F;
+}
+
+/* Wedding decorative utilities */
+.gold-gradient {
+  background: linear-gradient(135deg, #C8A46A 0%, #E0C696 50%, #B38C4F 100%);
+}
+
+.gold-text-gradient {
+  background: linear-gradient(135deg, #B38C4F 0%, #C8A46A 50%, #8D6E3E 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.card-wedding {
+  background: #FFFFFF;
+  border: 1px solid #E8DED0;
+  box-shadow: 0 4px 20px -2px rgba(200, 164, 106, 0.12);
+  transition: all 0.25s ease-in-out;
+}
+
+.card-wedding:hover {
+  border-color: #C8A46A;
+  box-shadow: 0 10px 25px -5px rgba(200, 164, 106, 0.2);
+}
+
+/* Sembunyikan Next.js dev indicator badge (logo N) & development overlays */
+nextjs-portal,
+[data-nextjs-toast],
+[data-nextjs-dialog-overlay],
+#__next-build-watcher,
+div[data-nextjs-dev-tools-button],
+button[aria-label*="Next.js"] {
+  display: none !important;
+}
