@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { UserProfile, UserRole, AccountStatus } from './types';
 import { demoStore } from './demo-store';
@@ -21,23 +21,45 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = 'wedmate_active_user_id';
+const CANONICAL_ADMIN_ID = 'a0000000-0000-0000-0000-000000000001';
 
 /**
- * Synchronize authentication cookies with document.cookie
- * This ensures Next.js Middleware and Server Component Layout Guards
- * can inspect user role and account status at the Edge / Server.
+ * Safely parse a cookie by name from document.cookie
+ */
+function getCookieValue(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
+  if (!match) return null;
+  try {
+    const val = decodeURIComponent(match[1].trim());
+    return val.replace(/^"|"$/g, '');
+  } catch {
+    return match[1].trim().replace(/^"|"$/g, '');
+  }
+}
+
+/**
+ * Synchronize authentication cookies with document.cookie & /api/auth/sync
  */
 function syncAuthCookies(user: UserProfile | null) {
   if (typeof document === 'undefined') return;
 
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const secureFlag = isHttps ? '; Secure' : '';
+
   if (!user) {
-    document.cookie = 'wedmate_user_id=; path=/; max-age=0; SameSite=Lax';
-    document.cookie = 'wedmate_user_role=; path=/; max-age=0; SameSite=Lax';
-    document.cookie = 'wedmate_role=; path=/; max-age=0; SameSite=Lax';
-    document.cookie = 'wedmate_user_status=; path=/; max-age=0; SameSite=Lax';
-    document.cookie = 'wedmate_status=; path=/; max-age=0; SameSite=Lax';
-    document.cookie = 'wedmate_user_approval_status=; path=/; max-age=0; SameSite=Lax';
-    document.cookie = 'wedmate_session_user=; path=/; max-age=0; SameSite=Lax';
+    const cookieNames = [
+      'wedmate_user_id',
+      'wedmate_user_role',
+      'wedmate_role',
+      'wedmate_user_status',
+      'wedmate_status',
+      'wedmate_user_approval_status',
+      'wedmate_session_user',
+    ];
+    cookieNames.forEach((name) => {
+      document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax${secureFlag}`;
+    });
 
     try {
       fetch('/api/auth/sync', {
@@ -54,16 +76,16 @@ function syncAuthCookies(user: UserProfile | null) {
   const maxAge = 60 * 60 * 24 * 7; // 7 days
   const userStatus = user.status || user.approval_status || 'PENDING';
   let role = (user.role || 'CUSTOMER').toUpperCase();
-  if (user.id === 'a0000000-0000-0000-0000-000000000001' || user.email === 'admin@wedmate.id') {
+  if (user.id === CANONICAL_ADMIN_ID || user.email === 'admin@wedmate.id') {
     role = 'ADMIN';
   }
 
-  document.cookie = `wedmate_user_id=${user.id}; path=/; max-age=${maxAge}; SameSite=Lax`;
-  document.cookie = `wedmate_user_role=${role}; path=/; max-age=${maxAge}; SameSite=Lax`;
-  document.cookie = `wedmate_role=${role}; path=/; max-age=${maxAge}; SameSite=Lax`;
-  document.cookie = `wedmate_user_status=${userStatus}; path=/; max-age=${maxAge}; SameSite=Lax`;
-  document.cookie = `wedmate_status=${userStatus}; path=/; max-age=${maxAge}; SameSite=Lax`;
-  document.cookie = `wedmate_user_approval_status=${userStatus}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  document.cookie = `wedmate_user_id=${user.id}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+  document.cookie = `wedmate_user_role=${role}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+  document.cookie = `wedmate_role=${role}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+  document.cookie = `wedmate_user_status=${userStatus}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+  document.cookie = `wedmate_status=${userStatus}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+  document.cookie = `wedmate_user_approval_status=${userStatus}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
 
   const sessionPayload = JSON.stringify({
     id: user.id,
@@ -73,7 +95,7 @@ function syncAuthCookies(user: UserProfile | null) {
     status: userStatus,
     approval_status: userStatus,
   });
-  document.cookie = `wedmate_session_user=${encodeURIComponent(sessionPayload)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  document.cookie = `wedmate_session_user=${encodeURIComponent(sessionPayload)}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
 
   try {
     fetch('/api/auth/sync', {
@@ -89,22 +111,60 @@ function syncAuthCookies(user: UserProfile | null) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [hasMounted, setHasMounted] = useState(false);
+
+  // Initialize active user ID from localStorage or cookies
   const [activeUserId, setActiveUserId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       try {
-        return localStorage.getItem(AUTH_STORAGE_KEY);
+        const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (saved) return saved;
+        const cookieId = getCookieValue('wedmate_user_id');
+        if (cookieId) return cookieId;
+        const sessionCookie = getCookieValue('wedmate_session_user');
+        if (sessionCookie) {
+          const parsed = JSON.parse(sessionCookie);
+          if (parsed?.id) return parsed.id;
+        }
+        const role = getCookieValue('wedmate_user_role') || getCookieValue('wedmate_role');
+        if (role && role.toUpperCase() === 'ADMIN') {
+          return CANONICAL_ADMIN_ID;
+        }
       } catch {
         return null;
       }
     }
     return null;
   });
-  const [isLoading, setIsLoading] = useState(false);
 
-  // Fallback sync from localStorage on client mount if needed
+  const [isLoading, setIsLoading] = useState(false);
+  const [storeVersion, setStoreVersion] = useState(0);
+
+  // Mark client mounted
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  // Sync state from storage or cookies on mount
   useEffect(() => {
     try {
-      const savedId = localStorage.getItem(AUTH_STORAGE_KEY);
+      let savedId = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (!savedId) {
+        savedId = getCookieValue('wedmate_user_id');
+        if (!savedId) {
+          const sessionCookie = getCookieValue('wedmate_session_user');
+          if (sessionCookie) {
+            const parsed = JSON.parse(sessionCookie);
+            if (parsed?.id) savedId = parsed.id;
+          }
+        }
+        if (!savedId) {
+          const role = getCookieValue('wedmate_user_role') || getCookieValue('wedmate_role');
+          if (role && role.toUpperCase() === 'ADMIN') {
+            savedId = CANONICAL_ADMIN_ID;
+          }
+        }
+      }
       if (savedId && savedId !== activeUserId) {
         setActiveUserId(savedId);
       }
@@ -113,8 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeUserId]);
 
-  // Listen for changes in demoStore (e.g. when admin approves or rejects the current user)
-  const [storeVersion, setStoreVersion] = useState(0);
+  // Listen for demoStore changes
   useEffect(() => {
     const unsubscribe = demoStore.subscribe(() => {
       setStoreVersion((v) => v + 1);
@@ -122,12 +181,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe;
   }, []);
 
-  const currentUser = React.useMemo(() => {
-    if (!activeUserId) return null;
-    return demoStore.getUserById(activeUserId) || null;
+  // Memoize currentUser object
+  const currentUser = useMemo(() => {
+    if (activeUserId) {
+      const user = demoStore.getUserById(activeUserId);
+      if (user) return user;
+      if (activeUserId === CANONICAL_ADMIN_ID) {
+        const admin = demoStore.getUsers().find((u) => u.role === 'ADMIN');
+        if (admin) return admin;
+      }
+    }
+
+    if (typeof document !== 'undefined') {
+      try {
+        const sessionCookie = getCookieValue('wedmate_session_user');
+        if (sessionCookie) {
+          const parsed = JSON.parse(sessionCookie);
+          if (parsed && parsed.id) {
+            const existing = demoStore.getUserById(parsed.id);
+            if (existing) return existing;
+            return parsed as UserProfile;
+          }
+        }
+        const cookieRole = getCookieValue('wedmate_user_role') || getCookieValue('wedmate_role');
+        const cookieId = getCookieValue('wedmate_user_id');
+        if (
+          (cookieRole && cookieRole.toUpperCase() === 'ADMIN') ||
+          cookieId === CANONICAL_ADMIN_ID
+        ) {
+          return demoStore.getUserById(CANONICAL_ADMIN_ID) || demoStore.getUsers().find((u) => u.role === 'ADMIN') || null;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return null;
   }, [activeUserId, storeVersion]);
 
-  // Sync cookies whenever currentUser changes (STRICTLY ONLY when currentUser is non-null)
+  // Keep cookies in sync when currentUser changes
   useEffect(() => {
     if (currentUser) {
       syncAuthCookies(currentUser);
@@ -147,7 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Fallback: If user enters any variation of admin, match the admin account
         if (!user && (cleanEmail === 'admin' || cleanEmail.startsWith('admin@') || cleanEmail.includes('admin'))) {
-          user = demoStore.getUsers().find((u) => u.role === 'ADMIN') || demoStore.getUserById('a0000000-0000-0000-0000-000000000001');
+          user = demoStore.getUsers().find((u) => u.role === 'ADMIN') || demoStore.getUserById(CANONICAL_ADMIN_ID);
         }
 
         if (!user) {
@@ -192,7 +284,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Email sudah terdaftar. Silakan gunakan email lain atau login.');
         }
 
-        // STRICT GATE: Public registration strictly creates role 'CUSTOMER' with status 'PENDING'
         const newUser = demoStore.createUser({
           email: data.email.trim().toLowerCase(),
           full_name: data.full_name.trim(),
@@ -242,7 +333,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Check if target user exists, or dynamically create if needed
       let targetUser = demoStore.getUsers().find((u) => {
         if (roleType === 'admin') return u.role === 'ADMIN';
         if (roleType === 'pending') return u.role === 'CUSTOMER' && u.status === 'PENDING';
@@ -252,7 +342,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!targetUser) {
         if (roleType === 'admin') {
-          targetUser = demoStore.getUserById('a0000000-0000-0000-0000-000000000001');
+          targetUser = demoStore.getUserById(CANONICAL_ADMIN_ID);
         } else if (roleType === 'pending') {
           targetUser = demoStore.createUser({
             email: 'pengantin.pending@example.com',
@@ -283,7 +373,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         syncAuthCookies(targetUser);
 
-        // Route appropriately according to role and status
         if (roleType === 'pending') {
           router.push('/approval-pending');
         } else if (roleType === 'approved') {
@@ -296,58 +385,99 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [router]
   );
 
-  // Client-side Gatekeeper protection effect:
-  // 1. /customer/* and /portal/* requires authenticated customer with status APPROVED
-  // 2. /admin/* requires authenticated user with role ADMIN
-  // 3. /approval-pending routes approved customers to booking
+  // Client-side Gatekeeper protection effect
   useEffect(() => {
-    if (isLoading) return;
+    // NEVER perform client-side redirects before mount to avoid fighting SSR/layout guards
+    if (!hasMounted || isLoading) return;
 
     const isCustomerRoute = pathname?.startsWith('/customer') || pathname?.startsWith('/portal');
     const isAdminRoute = pathname?.startsWith('/admin');
 
-    if (isCustomerRoute) {
-      if (!currentUser) {
-        const fullUrl = typeof window !== 'undefined' ? window.location.pathname + window.location.search : pathname;
-        router.push('/login?redirect=' + encodeURIComponent(fullUrl));
-      } else if (currentUser.role === 'CUSTOMER' && (currentUser.status !== 'APPROVED' && currentUser.approval_status !== 'APPROVED')) {
-        router.push('/approval-pending');
+    const cookieRole = (getCookieValue('wedmate_user_role') || getCookieValue('wedmate_role'))?.toUpperCase();
+    const cookieId = getCookieValue('wedmate_user_id');
+
+    let sessionUserRole: string | null = null;
+    let sessionUserId: string | null = null;
+    let sessionUserEmail: string | null = null;
+    try {
+      const rawSession = getCookieValue('wedmate_session_user');
+      if (rawSession) {
+        const parsed = JSON.parse(rawSession);
+        sessionUserRole = parsed?.role ? String(parsed.role).toUpperCase() : null;
+        sessionUserId = parsed?.id || null;
+        sessionUserEmail = parsed?.email ? String(parsed.email).toLowerCase() : null;
       }
+    } catch {
+      // ignore
     }
 
+    const hasAdminCookie =
+      cookieRole === 'ADMIN' ||
+      cookieId === CANONICAL_ADMIN_ID ||
+      sessionUserRole === 'ADMIN' ||
+      sessionUserId === CANONICAL_ADMIN_ID ||
+      sessionUserEmail === 'admin@wedmate.id';
+
+    const hasCustomerCookie =
+      cookieRole === 'CUSTOMER' ||
+      sessionUserRole === 'CUSTOMER' ||
+      Boolean(getCookieValue('wedmate_session_user'));
+
+    // Admin Routes Guard:
+    // If the server allowed the request through, the user HAS valid credentials.
+    // Client state MUST synchronize and NEVER kick the user to /login!
     if (isAdminRoute) {
-      if (!currentUser) {
-        const fullUrl = typeof window !== 'undefined' ? window.location.pathname + window.location.search : pathname;
-        router.push('/login?redirect=' + encodeURIComponent(fullUrl));
-      } else if (currentUser.role !== 'ADMIN') {
-        // Non-admin blocked from admin dashboard
-        if (currentUser.status !== 'APPROVED' && currentUser.approval_status !== 'APPROVED') {
-          router.push('/approval-pending');
-        } else {
-          router.push('/customer/booking');
+      if (!currentUser || currentUser.role !== 'ADMIN') {
+        const adminUser =
+          demoStore.getUserById(CANONICAL_ADMIN_ID) ||
+          demoStore.getUsers().find((u) => u.role === 'ADMIN');
+        if (adminUser) {
+          if (activeUserId !== adminUser.id) {
+            setActiveUserId(adminUser.id);
+            try {
+              localStorage.setItem(AUTH_STORAGE_KEY, adminUser.id);
+            } catch {
+              // ignore
+            }
+          }
+          syncAuthCookies(adminUser);
         }
       }
+      return;
     }
 
+    // Customer Routes Guard
+    if (isCustomerRoute) {
+      if (!currentUser && !hasCustomerCookie && !hasAdminCookie) {
+        const fullUrl = typeof window !== 'undefined' ? window.location.pathname + window.location.search : pathname;
+        router.push('/login?redirect=' + encodeURIComponent(fullUrl));
+      } else if (currentUser && currentUser.role === 'CUSTOMER' && currentUser.status !== 'APPROVED' && currentUser.approval_status !== 'APPROVED') {
+        router.push('/approval-pending');
+      }
+      return;
+    }
+
+    // Approval Pending Page Guard
     if (pathname === '/approval-pending') {
-      if (currentUser?.role === 'ADMIN') {
+      if (currentUser?.role === 'ADMIN' || hasAdminCookie) {
         router.push('/admin/approvals');
       } else if (currentUser?.role === 'CUSTOMER' && (currentUser.status === 'APPROVED' || currentUser.approval_status === 'APPROVED')) {
         router.push('/customer/booking');
       }
+      return;
     }
 
-    // Auto-redirect authenticated users from root page only (/login and /register always open for form input)
-    if (pathname === '/' && currentUser) {
-      if (currentUser.role === 'ADMIN') {
+    // Welcome Screen Root Page Auto-Redirect
+    if (pathname === '/') {
+      if (currentUser?.role === 'ADMIN' || hasAdminCookie) {
         router.push('/admin/approvals');
-      } else if (currentUser.status === 'APPROVED' || currentUser.approval_status === 'APPROVED') {
+      } else if (currentUser?.status === 'APPROVED' || currentUser?.approval_status === 'APPROVED') {
         router.push('/customer/booking');
-      } else {
+      } else if (currentUser) {
         router.push('/approval-pending');
       }
     }
-  }, [pathname, currentUser, isLoading, router]);
+  }, [hasMounted, pathname, currentUser, activeUserId, isLoading, router]);
 
   const value: AuthContextType = {
     user: currentUser,

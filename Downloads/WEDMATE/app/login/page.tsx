@@ -12,11 +12,24 @@ function LoginContent() {
   const packageParam = searchParams.get('packageId') || searchParams.get('package');
   const redirectParam = searchParams.get('redirect');
 
-  const { login } = useAuth();
+  const { user, login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Auto-redirect if already logged in
+  React.useEffect(() => {
+    if (user?.role === 'ADMIN' || user?.id === 'a0000000-0000-0000-0000-000000000001' || user?.email === 'admin@wedmate.id') {
+      const target = redirectParam && redirectParam.startsWith('/admin') ? redirectParam : '/admin/approvals';
+      window.location.replace(target);
+    } else if (user?.status === 'APPROVED' || user?.approval_status === 'APPROVED') {
+      const target = packageParam ? `/customer/booking?packageId=${packageParam}` : redirectParam || '/customer/booking';
+      window.location.replace(target);
+    } else if (user) {
+      window.location.replace('/approval-pending');
+    }
+  }, [user, redirectParam, packageParam]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

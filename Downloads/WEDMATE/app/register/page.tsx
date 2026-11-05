@@ -51,12 +51,22 @@ function RegisterContent() {
         wedding_date: formData.weddingDate || undefined,
       });
 
+      try {
+        await fetch('/api/auth/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: newUser }),
+        });
+      } catch {
+        // ignore
+      }
+
       // Strict Zero-Trust Security:
       // PENDING user cannot create bookings. User is directed to /approval-pending.
       // Once approved by admin, customer proceeds to booking.
 
       // Role is CUSTOMER and status is PENDING -> redirect to /approval-pending
-      window.location.assign('/approval-pending');
+      window.location.replace('/approval-pending');
     } catch (err: any) {
       setError(err?.message || 'Gagal mendaftar. Silakan coba kembali.');
       setLoading(false);

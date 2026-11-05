@@ -2,11 +2,21 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const user = body?.user;
 
     const response = NextResponse.json({ ok: true, user: user || null });
     const maxAge = 60 * 60 * 24 * 7; // 7 days
+    const isHttps =
+      request.headers.get('x-forwarded-proto') === 'https' ||
+      request.url.startsWith('https:');
+
+    const cookieOptions = {
+      path: '/',
+      sameSite: 'lax' as const,
+      secure: isHttps,
+      httpOnly: false,
+    };
 
     if (!user) {
       const cookieNames = [
@@ -19,7 +29,7 @@ export async function POST(request: NextRequest) {
         'wedmate_session_user',
       ];
       cookieNames.forEach((name) => {
-        response.cookies.set(name, '', { path: '/', maxAge: 0, sameSite: 'lax' });
+        response.cookies.set(name, '', { ...cookieOptions, maxAge: 0 });
       });
       return response;
     }
@@ -30,12 +40,12 @@ export async function POST(request: NextRequest) {
       role = 'ADMIN';
     }
 
-    response.cookies.set('wedmate_user_id', user.id, { path: '/', maxAge, sameSite: 'lax' });
-    response.cookies.set('wedmate_user_role', role, { path: '/', maxAge, sameSite: 'lax' });
-    response.cookies.set('wedmate_role', role, { path: '/', maxAge, sameSite: 'lax' });
-    response.cookies.set('wedmate_user_status', userStatus, { path: '/', maxAge, sameSite: 'lax' });
-    response.cookies.set('wedmate_status', userStatus, { path: '/', maxAge, sameSite: 'lax' });
-    response.cookies.set('wedmate_user_approval_status', userStatus, { path: '/', maxAge, sameSite: 'lax' });
+    response.cookies.set('wedmate_user_id', user.id, { ...cookieOptions, maxAge });
+    response.cookies.set('wedmate_user_role', role, { ...cookieOptions, maxAge });
+    response.cookies.set('wedmate_role', role, { ...cookieOptions, maxAge });
+    response.cookies.set('wedmate_user_status', userStatus, { ...cookieOptions, maxAge });
+    response.cookies.set('wedmate_status', userStatus, { ...cookieOptions, maxAge });
+    response.cookies.set('wedmate_user_approval_status', userStatus, { ...cookieOptions, maxAge });
 
     const sessionPayload = JSON.stringify({
       id: user.id,
@@ -46,13 +56,25 @@ export async function POST(request: NextRequest) {
       approval_status: userStatus,
     });
     response.cookies.set('wedmate_session_user', encodeURIComponent(sessionPayload), {
-      path: '/',
+      ...cookieOptions,
       maxAge,
-      sameSite: 'lax',
     });
 
     return response;
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
   }
+}
+
+export async function GET(request: NextRequest) {
+  const sessionCookie = request.cookies.get('wedmate_session_user')?.value;
+  let user = null;
+  if (sessionCookie) {
+    try {
+      user = JSON.parse(decodeURIComponent(sessionCookie));
+    } catch {
+      // ignore
+    }
+  }
+  return NextResponse.json({ ok: true, user });
 }
