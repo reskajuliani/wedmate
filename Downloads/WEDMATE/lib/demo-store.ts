@@ -430,12 +430,15 @@ class DemoStore {
     };
   }
 
-  public updateBookingStatus(id: string, status: BookingStatus): Booking {
+  public updateBookingStatus(id: string, status: BookingStatus, notes?: string): Booking {
     const index = this.state.bookings.findIndex((b) => b.id === id);
     if (index === -1) throw new Error('Booking not found');
 
     const booking = this.state.bookings[index];
     booking.status = status;
+    if (notes !== undefined) {
+      booking.notes = notes;
+    }
     booking.updated_at = new Date().toISOString();
 
     // If confirmed and no project yet, auto-create wedding_project & default tasks!

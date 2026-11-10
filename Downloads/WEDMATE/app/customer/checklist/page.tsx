@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { demoStore } from '@/lib/demo-store';
+import { supabaseService } from '@/lib/supabase-service';
 import { WeddingProject, WeddingTask, Booking, TaskStatus } from '@/lib/types';
 import { formatDateIndo, formatRupiah } from '@/lib/utils';
 import {
@@ -99,10 +100,14 @@ export default function CustomerChecklistPage() {
   });
 
   useEffect(() => {
-    const refreshData = () => {
+    let isMounted = true;
+    const refreshData = async () => {
       if (!customerId) return;
-      const userProjects = demoStore.getProjects(customerId);
-      const userBookings = demoStore.getBookings(customerId);
+      const [userProjects, userBookings] = await Promise.all([
+        supabaseService.getProjects(customerId),
+        supabaseService.getBookings(customerId),
+      ]);
+      if (!isMounted) return;
 
       const confirmed = userBookings.find((b) => b.status === 'CONFIRMED');
       const pending = userBookings.find((b) => b.status === 'PENDING');
@@ -113,7 +118,7 @@ export default function CustomerChecklistPage() {
       if (userProjects.length > 0) {
         const currentProject = userProjects[0];
         setProject(currentProject);
-        setTasks(demoStore.getTasksByProjectId(currentProject.id));
+        setTasks(currentProject.tasks || demoStore.getTasksByProjectId(currentProject.id));
       } else {
         setProject(null);
         setTasks([]);
@@ -122,7 +127,10 @@ export default function CustomerChecklistPage() {
 
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
-    return unsub;
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, [customerId]);
 
   // Real-time Countdown effect
@@ -158,21 +166,21 @@ export default function CustomerChecklistPage() {
     <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Page Header */}
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8DED0] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8E2D8] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <span className="text-xs uppercase font-semibold text-[#C8A46A] tracking-widest block mb-1">
               Portal Pengantin WEDMATE
             </span>
-            <h1 className="font-serif text-3xl font-bold text-[#333333]">
-              Status Booking & Checklist Persiapan
+            <h1 className="font-serif text-3xl font-bold text-[#1A1A1A]">
+              Status Booking &amp; Checklist Persiapan
             </h1>
-            <p className="text-xs text-[#333333]/70 mt-1">
+            <p className="text-xs text-[#1A1A1A]/70 mt-1">
               Pantau jadwal hitung mundur hari pernikahan dan progres checklist tugas yang disiapkan oleh tim Wedding Organizer kami.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#FAF8F5] text-[#333333] border border-[#E8DED0]">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#FAF8F5] text-[#1A1A1A] border border-[#E8E2D8]">
               <Lock className="w-3.5 h-3.5 text-[#C8A46A]" />
               <span>Pantauan Klien (Read-Only)</span>
             </span>
@@ -183,18 +191,18 @@ export default function CustomerChecklistPage() {
         {!project ? (
           <div>
             {pendingBooking ? (
-              <div className="bg-white rounded-3xl p-8 border border-[#E8DED0] shadow-xs text-center max-w-2xl mx-auto space-y-4">
+              <div className="bg-white rounded-3xl p-8 border border-[#E8E2D8] shadow-xs text-center max-w-2xl mx-auto space-y-4">
                 <div className="w-14 h-14 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
                   <Clock className="w-7 h-7 animate-pulse" />
                 </div>
-                <h3 className="font-serif text-2xl font-bold text-[#333333]">
+                <h3 className="font-serif text-2xl font-bold text-[#1A1A1A]">
                   Booking Anda Sedang Ditinjau Admin
                 </h3>
-                <p className="text-xs sm:text-sm text-[#333333]/70 leading-relaxed max-w-lg mx-auto">
+                <p className="text-xs sm:text-sm text-[#1A1A1A]/70 leading-relaxed max-w-lg mx-auto">
                   Pengajuan booking paket{' '}
-                  <strong className="text-[#333333] font-semibold">{pendingBooking.package?.name}</strong>{' '}
+                  <strong className="text-[#1A1A1A] font-semibold">{pendingBooking.package?.name}</strong>{' '}
                   untuk tanggal{' '}
-                  <strong className="text-[#333333] font-semibold">{formatDateIndo(pendingBooking.wedding_date)}</strong>{' '}
+                  <strong className="text-[#1A1A1A] font-semibold">{formatDateIndo(pendingBooking.wedding_date)}</strong>{' '}
                   sedang dalam proses review.{' '}
                   Checklist tugas persiapan pernikahan dan wedding countdown akan otomatis aktif segera setelah Admin menyetujui reservasi Anda.
                 </p>
@@ -211,7 +219,7 @@ export default function CustomerChecklistPage() {
             ) : (
               <EmptyState
                 icon={ListTodo}
-                title="Belum Ada Proyek Pernikahan Aktif"
+                title="Belum ada data tersedia"
                 description="Checklist persiapan pernikahan dan wedding countdown akan otomatis diaktifkan setelah Anda membuat pengajuan booking dan dikonfirmasi oleh tim Wedding Organizer."
                 actionLabel="Ajukan Booking Sekarang"
                 actionHref="/customer/booking"
@@ -224,9 +232,9 @@ export default function CustomerChecklistPage() {
             {/* BOOKING STATUS & COUNTDOWN HERO */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Col 1: Booking Status Summary */}
-              <div className="bg-white rounded-3xl p-6 border border-[#E8DED0] shadow-xs space-y-4 flex flex-col justify-between">
+              <div className="bg-white rounded-3xl p-6 border border-[#E8E2D8] shadow-xs space-y-4 flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#E8E2D8]">
                     <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
                       Status Reservasi
                     </span>
@@ -237,7 +245,7 @@ export default function CustomerChecklistPage() {
                   </div>
 
                   <div className="mt-3 space-y-1">
-                    <h3 className="font-serif text-2xl font-bold text-[#333333]">
+                    <h3 className="font-serif text-2xl font-bold text-[#1A1A1A]">
                       {project.title}
                     </h3>
                     <div className="text-xs text-[#C8A46A] font-semibold flex items-center gap-1.5 pt-1">
@@ -247,11 +255,11 @@ export default function CustomerChecklistPage() {
                   </div>
 
                   {confirmedBooking && (
-                    <div className="mt-4 pt-3 border-t border-[#E8DED0] space-y-2 text-xs text-gray-600">
+                    <div className="mt-4 pt-3 border-t border-[#E8E2D8] space-y-2 text-xs text-gray-600">
                       <div className="flex items-start gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-[#C8A46A] shrink-0 mt-0.5" />
                         <div>
-                          <strong className="text-[#333333] block">{confirmedBooking.venue_name}</strong>
+                          <strong className="text-[#1A1A1A] block">{confirmedBooking.venue_name}</strong>
                           <span className="text-gray-500 line-clamp-1">{confirmedBooking.venue_address}</span>
                         </div>
                       </div>
@@ -263,7 +271,7 @@ export default function CustomerChecklistPage() {
                   )}
                 </div>
 
-                <div className="pt-3 border-t border-[#E8DED0] flex items-center justify-between text-xs">
+                <div className="pt-3 border-t border-[#E8E2D8] flex items-center justify-between text-xs">
                   <span className="text-gray-500">Nilai Kontrak:</span>
                   <span className="font-serif font-bold text-[#C8A46A] text-sm">
                     {confirmedBooking ? formatRupiah(confirmedBooking.total_price) : '-'}
@@ -272,7 +280,7 @@ export default function CustomerChecklistPage() {
               </div>
 
               {/* Col 2: Wedding Countdown */}
-              <div className="lg:col-span-2 bg-gradient-to-br from-[#1F1F1F] to-[#2B2B2B] text-white rounded-3xl p-6 sm:p-8 border border-white/10 shadow-md flex flex-col justify-between">
+              <div className="lg:col-span-2 bg-[#1A1A1A] text-white rounded-3xl p-6 sm:p-8 border border-white/10 shadow-md flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-xs uppercase font-semibold text-[#C8A46A] tracking-widest flex items-center gap-1.5">
@@ -360,23 +368,23 @@ export default function CustomerChecklistPage() {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="font-serif text-2xl font-bold text-[#333333]">
+                  <h2 className="font-serif text-2xl font-bold text-[#1A1A1A]">
                     Checklist Tugas Wedding Organizer
                   </h2>
-                  <p className="text-xs text-[#333333]/70 mt-0.5">
+                  <p className="text-xs text-[#1A1A1A]/70 mt-0.5">
                     Daftar persiapan detail yang dijalankan secara profesional oleh tim WEDMATE untuk acara Anda.
                   </p>
                 </div>
 
                 {/* Notice pill */}
-                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FAF8F5] rounded-xl border border-[#E8DED0] text-xs text-[#333333]/80">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] text-xs text-[#1A1A1A]/80">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
                   <span>Dikelola Langsung Tim Wedding Director</span>
                 </div>
               </div>
 
               {/* Filter and Search Bar */}
-              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E8DED0] space-y-3">
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E8E2D8] space-y-3">
                 {/* Status Pills */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
                   {(
@@ -390,10 +398,10 @@ export default function CustomerChecklistPage() {
                     <button
                       key={s.key}
                       onClick={() => setSelectedStatus(s.key)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                      className={`px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                         selectedStatus === s.key
-                          ? 'bg-[#333333] text-white shadow-xs'
-                          : 'bg-[#F8F5EF] text-[#333333]/70 hover:text-[#333333] border border-[#E8DED0]'
+                          ? 'bg-[#1A1A1A] text-white shadow-xs'
+                          : 'bg-[#FAF8F5] text-[#1A1A1A]/70 hover:text-[#1A1A1A] border border-[#E8E2D8]'
                       }`}
                     >
                       {s.label}
@@ -401,15 +409,15 @@ export default function CustomerChecklistPage() {
                   ))}
                 </div>
 
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2 border-t border-[#E8DED0]">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2 border-t border-[#E8E2D8]">
                   {/* Category Filter Pills */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
                     <button
                       onClick={() => setSelectedCategory('ALL')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                         selectedCategory === 'ALL'
                           ? 'bg-[#C8A46A] text-white'
-                          : 'bg-[#FAF8F5] text-gray-600 hover:text-[#333333]'
+                          : 'bg-[#FAF8F5] text-gray-600 hover:text-[#1A1A1A]'
                       }`}
                     >
                       Semua Kategori
@@ -418,10 +426,10 @@ export default function CustomerChecklistPage() {
                       <button
                         key={cat}
                         onClick={() => setSelectedCategory(cat)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                           selectedCategory === cat
                             ? 'bg-[#C8A46A] text-white'
-                            : 'bg-[#FAF8F5] text-gray-600 hover:text-[#333333]'
+                            : 'bg-[#FAF8F5] text-gray-600 hover:text-[#1A1A1A]'
                         }`}
                       >
                         {cat}
@@ -437,7 +445,7 @@ export default function CustomerChecklistPage() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Cari tugas persiapan..."
-                      className="w-full pl-8 pr-3 py-2 text-xs bg-[#FAF8F5] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-[#C8A46A]"
+                      className="w-full pl-8 pr-3 py-2 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-[#C8A46A]"
                     />
                   </div>
                 </div>
@@ -447,7 +455,7 @@ export default function CustomerChecklistPage() {
               {filteredTasks.length === 0 ? (
                 <EmptyState
                   icon={ListTodo}
-                  title="Tidak Ada Tugas Ditemukan"
+                  title="Belum ada data tersedia"
                   description={
                     searchQuery || selectedCategory !== 'ALL' || selectedStatus !== 'ALL'
                       ? 'Tidak ada checklist yang cocok dengan filter yang dipilih.'
@@ -465,7 +473,7 @@ export default function CustomerChecklistPage() {
                   }}
                 />
               ) : (
-                <div className="bg-white rounded-3xl border border-[#E8DED0] overflow-hidden shadow-xs divide-y divide-[#E8DED0]">
+                <div className="bg-white rounded-3xl border border-[#E8E2D8] overflow-hidden shadow-xs divide-y divide-[#E8E2D8]">
                   {filteredTasks.map((task) => (
                     <div
                       key={task.id}
@@ -492,7 +500,7 @@ export default function CustomerChecklistPage() {
                         {/* Title & Description */}
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold text-[#333333]">
+                            <span className="text-sm font-semibold text-[#1A1A1A]">
                               {task.title}
                             </span>
                             <span
@@ -504,7 +512,7 @@ export default function CustomerChecklistPage() {
                             </span>
                           </div>
                           {task.description && (
-                            <p className="text-xs text-[#333333]/70 leading-relaxed">
+                            <p className="text-xs text-[#1A1A1A]/70 leading-relaxed">
                               {task.description}
                             </p>
                           )}

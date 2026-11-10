@@ -8,18 +8,15 @@ import { Booking } from '@/lib/types';
 import { EventScheduleCalendar } from '@/components/admin/EventScheduleCalendar';
 import {
   CalendarDays,
-  CheckCircle2,
-  AlertCircle,
+  ShieldCheck,
   ArrowRight,
   ListTodo,
-  ShieldCheck,
-  Package,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function AdminCalendarPage() {
   const { user } = useAuth();
-  const adminId = user?.id || 'a0000000-0000-0000-0000-000000000001';
-
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
@@ -32,6 +29,7 @@ export default function AdminCalendarPage() {
     const refreshData = () => {
       setBookings(demoStore.getBookings());
     };
+
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
     return unsub;
@@ -39,10 +37,8 @@ export default function AdminCalendarPage() {
 
   const handleConfirmBooking = (bookingId: string) => {
     try {
-      const result = demoStore.confirmBooking(bookingId, adminId);
-      showToast(
-        `Booking ${bookingId} berhasil DIKONFIRMASI! Proyek checklist dan invoice pembayaran otomatis diterbitkan.`
-      );
+      demoStore.updateBookingStatus(bookingId, 'CONFIRMED');
+      showToast('Booking berhasil dikonfirmasi! Proyek & invoice tagihan otomatis diterbitkan.');
     } catch (err: any) {
       showToast(err.message || 'Gagal mengonfirmasi booking.', 'error');
     }
@@ -50,8 +46,8 @@ export default function AdminCalendarPage() {
 
   const handleCancelBooking = (bookingId: string) => {
     try {
-      demoStore.cancelBooking(bookingId, 'Dibatalkan oleh Administrator melalui Kalender Jadwal');
-      showToast(`Pengajuan booking ${bookingId} berhasil DIBATALKAN.`);
+      demoStore.updateBookingStatus(bookingId, 'CANCELLED', 'Dibatalkan dari kalender jadwal oleh admin.');
+      showToast('Booking berhasil dibatalkan.', 'success');
     } catch (err: any) {
       showToast(err.message || 'Gagal membatalkan booking.', 'error');
     }
@@ -61,7 +57,7 @@ export default function AdminCalendarPage() {
     <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Page Header */}
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8DED0] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8E2D8] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 mb-1.5">
               <span className="text-xs uppercase font-semibold text-[#C8A46A] tracking-widest">
@@ -73,10 +69,10 @@ export default function AdminCalendarPage() {
                 Kalender Jadwal Acara
               </span>
             </div>
-            <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#333333]">
+            <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#1A1A1A]">
               Kalender Reservasi Acara Pernikahan
             </h1>
-            <p className="text-xs sm:text-sm text-[#333333]/70 mt-2 leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#1A1A1A]/70 mt-2 leading-relaxed">
               Tinjau jadwal acara pernikahan yang telah dibooking oleh calon pengantin. Klik pada tanggal yang terisi untuk melihat rincian klien, paket, venue, dan melakukan tindakan konfirmasi langsung.
             </p>
           </div>
@@ -84,7 +80,7 @@ export default function AdminCalendarPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/admin/approvals?tab=bookings"
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#FAF8F5] hover:bg-[#F8F5EF] text-[#333333] border border-[#E8DED0] font-semibold text-xs transition"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#FAF8F5] hover:bg-white text-[#1A1A1A] border border-[#E8E2D8] font-semibold text-xs transition"
             >
               <span>Daftar Pengajuan Booking</span>
               <ArrowRight className="w-4 h-4 text-[#C8A46A]" />

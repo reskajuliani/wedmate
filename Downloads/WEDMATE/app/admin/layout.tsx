@@ -106,9 +106,9 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F5EF] flex flex-col">
+    <div className="min-h-screen bg-[#FAF8F5] flex flex-col">
       <AdminHeader />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 bg-[#FAF8F5] text-[#1A1A1A]">{children}</main>
     </div>
   );
 }

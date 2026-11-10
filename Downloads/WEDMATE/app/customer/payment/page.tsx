@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { demoStore } from '@/lib/demo-store';
+import { supabaseService } from '@/lib/supabase-service';
 import { Payment, PaymentTransaction, PaymentMethod, OFFICIAL_PAYMENT_ACCOUNTS } from '@/lib/types';
 import { formatRupiah, formatDateIndo, formatDateTimeIndo } from '@/lib/utils';
 import {
@@ -61,14 +62,12 @@ export default function CustomerPaymentPage() {
   };
 
   useEffect(() => {
-    const refreshData = () => {
+    const refreshData = async () => {
       if (!customerId) return;
-      const userPayments = demoStore.getPayments(customerId);
+      const userPayments = await supabaseService.getPayments(customerId);
       setPayments(userPayments);
 
-      const userTxs = demoStore
-        .getTransactions()
-        .filter((t) => t.customer_id === customerId);
+      const userTxs = await supabaseService.getTransactions(customerId);
       setTransactions(userTxs);
 
       if (userPayments.length > 0 && !selectedPaymentId) {
@@ -122,12 +121,11 @@ export default function CustomerPaymentPage() {
       };
       reader.readAsDataURL(file);
     } else {
-      // Fallback placeholder preview
       setProofPreview('https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80');
     }
   };
 
-  const handleSubmitProof = (e: React.FormEvent) => {
+  const handleSubmitProof = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -149,7 +147,7 @@ export default function CustomerPaymentPage() {
 
     setIsSubmitting(true);
     try {
-      demoStore.createTransaction({
+      await supabaseService.createTransaction({
         payment_id: selectedPaymentId,
         customer_id: customerId,
         payment_method: selectedMethod,
@@ -177,15 +175,15 @@ export default function CustomerPaymentPage() {
     <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">
       <div className="max-w-7xl mx-auto space-y-10">
         {/* Page Header */}
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8DED0] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8E2D8] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <span className="text-xs uppercase font-semibold text-[#C8A46A] tracking-widest block mb-1">
               Portal Pengantin WEDMATE
             </span>
-            <h1 className="font-serif text-3xl font-bold text-[#333333]">
-              Informasi Tagihan & Pembayaran
+            <h1 className="font-serif text-3xl font-bold text-[#1A1A1A]">
+              Informasi Tagihan &amp; Pembayaran
             </h1>
-            <p className="text-xs text-[#333333]/70 mt-1">
+            <p className="text-xs text-[#1A1A1A]/70 mt-1">
               Pantau sisa saldo tagihan paket pernikahan, nomor rekening resmi, dan konfirmasi bukti setor transaksi Anda.
             </p>
           </div>
@@ -193,7 +191,7 @@ export default function CustomerPaymentPage() {
           {payments.length > 0 && totalRemaining > 0 && (
             <button
               onClick={() => handleOpenUpload()}
-              className="px-6 py-3.5 rounded-2xl bg-[#C8A46A] hover:bg-[#b59157] text-white font-semibold text-xs shadow-sm transition active:scale-95 flex items-center gap-2"
+              className="px-6 py-3.5 rounded-2xl bg-[#C8A46A] hover:bg-[#b59157] text-white font-semibold text-xs shadow-xs transition active:scale-95 flex items-center gap-2 cursor-pointer"
             >
               <Upload className="w-4 h-4" />
               <span>Unggah Bukti Transfer</span>
@@ -204,16 +202,16 @@ export default function CustomerPaymentPage() {
         {/* Toast Notification */}
         {toastMessage && (
           <div
-            className={`p-4 rounded-2xl border text-xs font-semibold flex items-center gap-3 animate-fadeIn shadow-sm ${
+            className={`p-4 rounded-2xl border text-xs font-semibold flex items-center gap-3 animate-fadeIn shadow-xs ${
               toastMessage.type === 'success'
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 : 'bg-red-50 text-red-800 border-red-200'
             }`}
           >
             {toastMessage.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
             )}
             <span>{toastMessage.text}</span>
           </div>
@@ -222,7 +220,7 @@ export default function CustomerPaymentPage() {
         {/* SECTION 1: BILLING BALANCE CARDS */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-serif text-2xl font-bold text-[#333333]">
+            <h2 className="font-serif text-2xl font-bold text-[#1A1A1A]">
               Status Saldo Tagihan
             </h2>
             {payments.length > 0 && (
@@ -235,7 +233,7 @@ export default function CustomerPaymentPage() {
           {payments.length === 0 ? (
             <EmptyState
               icon={CreditCard}
-              title="Belum Ada Tagihan Pembayaran"
+              title="Belum ada data tersedia"
               description="Invoice tagihan pembayaran akan otomatis diterbitkan setelah reservasi booking paket pernikahan Anda disetujui oleh Admin."
               actionLabel="Lihat Status Booking"
               actionHref="/customer/booking"
@@ -243,11 +241,11 @@ export default function CustomerPaymentPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Total Kontrak */}
-              <div className="bg-white rounded-3xl p-6 border border-[#E8DED0] shadow-xs space-y-2">
+              <div className="bg-white rounded-3xl p-6 border border-[#E8E2D8] shadow-xs space-y-2">
                 <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider block">
                   Total Nilai Kontrak
                 </span>
-                <div className="font-serif text-2xl sm:text-3xl font-bold text-[#333333]">
+                <div className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A]">
                   {formatRupiah(totalBilled)}
                 </div>
                 <p className="text-xs text-gray-500">
@@ -256,7 +254,7 @@ export default function CustomerPaymentPage() {
               </div>
 
               {/* Sudah Dibayar */}
-              <div className="bg-white rounded-3xl p-6 border border-[#E8DED0] shadow-xs space-y-2">
+              <div className="bg-white rounded-3xl p-6 border border-[#E8E2D8] shadow-xs space-y-2">
                 <span className="text-[10px] uppercase font-semibold text-emerald-600 tracking-wider block">
                   Total Telah Terverifikasi
                 </span>
@@ -299,31 +297,31 @@ export default function CustomerPaymentPage() {
 
         {/* SECTION 2: OFFICIAL ACCOUNTS (BCA & DANA) */}
         <div className="space-y-4">
-          <div className="border-b border-[#E8DED0] pb-3">
+          <div className="border-b border-[#E8E2D8] pb-3">
             <span className="text-xs uppercase font-semibold text-[#C8A46A] tracking-widest block mb-0.5">
               Kanal Pembayaran Resmi
             </span>
-            <h2 className="font-serif text-2xl font-bold text-[#333333]">
-              Rekening & E-Wallet Resmi WEDMATE
+            <h2 className="font-serif text-2xl font-bold text-[#1A1A1A]">
+              Rekening &amp; E-Wallet Resmi WEDMATE
             </h2>
-            <p className="text-xs text-[#333333]/70 mt-0.5">
+            <p className="text-xs text-[#1A1A1A]/70 mt-0.5">
               Pastikan transfer hanya ditujukan ke akun resmi di bawah ini demi keamanan transaksi Anda.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Account 1: BCA */}
-            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-[#E8DED0] shadow-xs space-y-5 hover:border-[#C8A46A] transition">
-              <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-[#E8E2D8] shadow-xs space-y-5 hover:border-[#C8A46A] transition">
+              <div className="flex items-center justify-between pb-3 border-b border-[#E8E2D8]">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold font-mono text-sm border border-blue-200">
                     BCA
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-[#333333]">
+                    <h3 className="font-bold text-sm text-[#1A1A1A]">
                       {OFFICIAL_PAYMENT_ACCOUNTS.BCA.bankName}
                     </h3>
-                    <span className="text-[10px] text-gray-400">Transfer Bank & M-Banking</span>
+                    <span className="text-[10px] text-gray-400">Transfer Bank &amp; M-Banking</span>
                   </div>
                 </div>
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -332,16 +330,16 @@ export default function CustomerPaymentPage() {
               </div>
 
               {/* Number and Copy */}
-              <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8DED0] flex items-center justify-between">
+              <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8E2D8] flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-gray-400 uppercase font-semibold block">
                     Nomor Rekening Resmi
                   </span>
-                  <span className="font-mono text-xl sm:text-2xl font-bold text-[#333333] tracking-wider">
+                  <span className="font-mono text-xl sm:text-2xl font-bold text-[#1A1A1A] tracking-wider">
                     {OFFICIAL_PAYMENT_ACCOUNTS.BCA.accountNumber}
                   </span>
                   <span className="text-xs text-gray-600 block mt-0.5">
-                    a/n{' '}<strong>{OFFICIAL_PAYMENT_ACCOUNTS.BCA.accountHolder}</strong>
+                    a/n <strong>{OFFICIAL_PAYMENT_ACCOUNTS.BCA.accountHolder}</strong>
                   </span>
                 </div>
 
@@ -349,7 +347,7 @@ export default function CustomerPaymentPage() {
                   onClick={() =>
                     copyToClipboard(OFFICIAL_PAYMENT_ACCOUNTS.BCA.accountNumber, 'Rekening BCA')
                   }
-                  className="p-3 rounded-xl bg-white border border-[#E8DED0] hover:bg-[#F8F5EF] text-[#333333] transition shadow-xs flex items-center gap-1.5 text-xs font-semibold"
+                  className="p-3 rounded-xl bg-white border border-[#E8E2D8] hover:bg-[#FAF8F5] text-[#1A1A1A] transition shadow-xs flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
                   title="Salin nomor rekening"
                 >
                   {copiedAccount === 'Rekening BCA' ? (
@@ -383,14 +381,14 @@ export default function CustomerPaymentPage() {
             </div>
 
             {/* Account 2: DANA */}
-            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-[#E8DED0] shadow-xs space-y-5 hover:border-[#C8A46A] transition">
-              <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-[#E8E2D8] shadow-xs space-y-5 hover:border-[#C8A46A] transition">
+              <div className="flex items-center justify-between pb-3 border-b border-[#E8E2D8]">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-cyan-50 text-cyan-700 flex items-center justify-center font-bold font-mono text-sm border border-cyan-200">
                     DANA
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-[#333333]">
+                    <h3 className="font-bold text-sm text-[#1A1A1A]">
                       {OFFICIAL_PAYMENT_ACCOUNTS.DANA.bankName}
                     </h3>
                     <span className="text-[10px] text-gray-400">Dompet Digital Resmi</span>
@@ -402,16 +400,16 @@ export default function CustomerPaymentPage() {
               </div>
 
               {/* Number and Copy */}
-              <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8DED0] flex items-center justify-between">
+              <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8E2D8] flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-gray-400 uppercase font-semibold block">
                     Nomor E-Wallet Resmi
                   </span>
-                  <span className="font-mono text-xl sm:text-2xl font-bold text-[#333333] tracking-wider">
+                  <span className="font-mono text-xl sm:text-2xl font-bold text-[#1A1A1A] tracking-wider">
                     {OFFICIAL_PAYMENT_ACCOUNTS.DANA.accountNumber}
                   </span>
                   <span className="text-xs text-gray-600 block mt-0.5">
-                    a/n{' '}<strong>{OFFICIAL_PAYMENT_ACCOUNTS.DANA.accountHolder}</strong>
+                    a/n <strong>{OFFICIAL_PAYMENT_ACCOUNTS.DANA.accountHolder}</strong>
                   </span>
                 </div>
 
@@ -419,7 +417,7 @@ export default function CustomerPaymentPage() {
                   onClick={() =>
                     copyToClipboard(OFFICIAL_PAYMENT_ACCOUNTS.DANA.accountNumber, 'E-Wallet DANA')
                   }
-                  className="p-3 rounded-xl bg-white border border-[#E8DED0] hover:bg-[#F8F5EF] text-[#333333] transition shadow-xs flex items-center gap-1.5 text-xs font-semibold"
+                  className="p-3 rounded-xl bg-white border border-[#E8E2D8] hover:bg-[#FAF8F5] text-[#1A1A1A] transition shadow-xs flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
                   title="Salin nomor DANA"
                 >
                   {copiedAccount === 'E-Wallet DANA' ? (
@@ -456,12 +454,12 @@ export default function CustomerPaymentPage() {
 
         {/* SECTION 3: TRANSACTION HISTORY */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-[#E8DED0] pb-3">
+          <div className="flex items-center justify-between border-b border-[#E8E2D8] pb-3">
             <div>
-              <h2 className="font-serif text-2xl font-bold text-[#333333]">
-                Riwayat Pembayaran & Verifikasi
+              <h2 className="font-serif text-2xl font-bold text-[#1A1A1A]">
+                Riwayat Pembayaran &amp; Verifikasi
               </h2>
-              <p className="text-xs text-[#333333]/70 mt-0.5">
+              <p className="text-xs text-[#1A1A1A]/70 mt-0.5">
                 Daftar bukti pembayaran yang telah Anda serahkan beserta status verifikasi dari tim administrasi.
               </p>
             </div>
@@ -469,7 +467,7 @@ export default function CustomerPaymentPage() {
             {payments.length > 0 && totalRemaining > 0 && (
               <button
                 onClick={() => handleOpenUpload()}
-                className="px-4 py-2 rounded-xl bg-[#FAF8F5] border border-[#E8DED0] text-[#333333] hover:bg-[#C8A46A] hover:text-white hover:border-[#C8A46A] text-xs font-semibold transition"
+                className="px-4 py-2 rounded-xl bg-[#FAF8F5] border border-[#E8E2D8] text-[#1A1A1A] hover:bg-[#C8A46A] hover:text-white hover:border-[#C8A46A] text-xs font-semibold transition cursor-pointer"
               >
                 + Unggah Bukti Baru
               </button>
@@ -479,27 +477,27 @@ export default function CustomerPaymentPage() {
           {transactions.length === 0 ? (
             <EmptyState
               icon={Clock}
-              title="Belum Ada Riwayat Transaksi"
+              title="Belum ada data tersedia"
               description="Anda belum mengunggah bukti pembayaran. Lakukan transfer ke salah satu rekening resmi di atas dan unggah buktinya di sini."
               actionLabel={payments.length > 0 ? 'Unggah Bukti Transfer' : undefined}
               onAction={payments.length > 0 ? () => handleOpenUpload() : undefined}
             />
           ) : (
-            <div className="bg-white rounded-3xl border border-[#E8DED0] overflow-hidden shadow-xs divide-y divide-[#E8DED0]">
+            <div className="bg-white rounded-3xl border border-[#E8E2D8] overflow-hidden shadow-xs divide-y divide-[#E8E2D8]">
               {transactions.map((tx) => (
                 <div
                   key={tx.id}
                   className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-[#FAF8F5]/60 transition"
                 >
                   <div className="flex items-start gap-4">
-                    {/* Method badge / icon */}
-                    <div className="w-12 h-12 rounded-2xl bg-[#FAF8F5] border border-[#E8DED0] flex items-center justify-center font-bold text-xs text-[#333333] shrink-0">
+                    {/* Method badge */}
+                    <div className="w-12 h-12 rounded-2xl bg-[#FAF8F5] border border-[#E8E2D8] flex items-center justify-center font-bold text-xs text-[#1A1A1A] shrink-0">
                       {tx.payment_method}
                     </div>
 
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-[#333333]">
+                        <span className="font-mono text-xs font-bold text-[#1A1A1A]">
                           {tx.transaction_number}
                         </span>
                         <span className="text-gray-300">•</span>
@@ -546,7 +544,7 @@ export default function CustomerPaymentPage() {
                     {/* View Proof Button */}
                     <button
                       onClick={() => setPreviewImage(tx.proof_url)}
-                      className="p-2 rounded-xl bg-[#FAF8F5] border border-[#E8DED0] hover:bg-white text-[#333333] transition"
+                      className="p-2 rounded-xl bg-[#FAF8F5] border border-[#E8E2D8] hover:bg-white text-[#1A1A1A] transition cursor-pointer"
                       title="Lihat Bukti Transfer"
                     >
                       <Eye className="w-4 h-4 text-gray-600" />
@@ -562,19 +560,19 @@ export default function CustomerPaymentPage() {
       {/* MODAL: UPLOAD PAYMENT PROOF */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 border border-[#E8DED0] shadow-xl space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 border border-[#E8E2D8] shadow-xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E8E2D8]">
               <div>
                 <span className="text-[10px] uppercase font-semibold text-[#C8A46A] tracking-wider block">
                   Konfirmasi Pembayaran
                 </span>
-                <h3 className="font-serif text-xl font-bold text-[#333333]">
+                <h3 className="font-serif text-xl font-bold text-[#1A1A1A]">
                   Unggah Bukti Transfer
                 </h3>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -590,11 +588,11 @@ export default function CustomerPaymentPage() {
             <form onSubmit={handleSubmitProof} className="space-y-4">
               {/* Select Payment Invoice */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#333333]">Pilih Tagihan</label>
+                <label className="text-xs font-semibold text-[#1A1A1A]">Pilih Tagihan</label>
                 <select
                   value={selectedPaymentId}
                   onChange={(e) => setSelectedPaymentId(e.target.value)}
-                  className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-[#C8A46A]"
+                  className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-[#C8A46A]"
                 >
                   {payments.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -606,15 +604,15 @@ export default function CustomerPaymentPage() {
 
               {/* Payment Method Selector */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#333333]">Metode Transfer</label>
+                <label className="text-xs font-semibold text-[#1A1A1A]">Metode Transfer</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setSelectedMethod('BCA')}
-                    className={`p-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                    className={`p-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
                       selectedMethod === 'BCA'
-                        ? 'border-[#C8A46A] bg-[#FAF8F5] text-[#333333]'
-                        : 'border-[#E8DED0] text-gray-500 hover:bg-gray-50'
+                        ? 'border-[#C8A46A] bg-[#FAF8F5] text-[#1A1A1A]'
+                        : 'border-[#E8E2D8] text-gray-500 hover:bg-gray-50'
                     }`}
                   >
                     <span>Bank BCA (446 156 3613)</span>
@@ -623,10 +621,10 @@ export default function CustomerPaymentPage() {
                   <button
                     type="button"
                     onClick={() => setSelectedMethod('DANA')}
-                    className={`p-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                    className={`p-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
                       selectedMethod === 'DANA'
-                        ? 'border-[#C8A46A] bg-[#FAF8F5] text-[#333333]'
-                        : 'border-[#E8DED0] text-gray-500 hover:bg-gray-50'
+                        ? 'border-[#C8A46A] bg-[#FAF8F5] text-[#1A1A1A]'
+                        : 'border-[#E8E2D8] text-gray-500 hover:bg-gray-50'
                     }`}
                   >
                     <span>DANA (085551124373)</span>
@@ -636,7 +634,7 @@ export default function CustomerPaymentPage() {
 
               {/* Amount Input */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#333333]">
+                <label className="text-xs font-semibold text-[#1A1A1A]">
                   Jumlah Nominal Transfer (Rp) <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -646,17 +644,17 @@ export default function CustomerPaymentPage() {
                   value={amountInput}
                   onChange={(e) => setAmountInput(e.target.value)}
                   placeholder="Contoh: 15000000"
-                  className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-[#C8A46A]"
+                  className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-[#C8A46A]"
                   required
                 />
               </div>
 
               {/* File Upload with Preview */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#333333]">
+                <label className="text-xs font-semibold text-[#1A1A1A]">
                   File Bukti Transfer (Foto / Screenshot) <span className="text-red-500">*</span>
                 </label>
-                <div className="border border-dashed border-[#E8DED0] rounded-2xl p-4 text-center bg-[#FAF8F5] hover:border-[#C8A46A] transition cursor-pointer relative">
+                <div className="border border-dashed border-[#E8E2D8] rounded-2xl p-4 text-center bg-[#FAF8F5] hover:border-[#C8A46A] transition cursor-pointer relative">
                   <input
                     type="file"
                     accept="image/*"
@@ -665,7 +663,7 @@ export default function CustomerPaymentPage() {
                   />
                   {proofPreview ? (
                     <div className="space-y-2">
-                      <div className="relative h-32 w-full mx-auto rounded-xl overflow-hidden border border-[#E8DED0]">
+                      <div className="relative h-32 w-full mx-auto rounded-xl overflow-hidden border border-[#E8E2D8]">
                         <Image
                           src={proofPreview}
                           alt="Preview bukti transfer"
@@ -684,7 +682,7 @@ export default function CustomerPaymentPage() {
                   ) : (
                     <div className="space-y-1 py-2">
                       <Upload className="w-8 h-8 text-[#C8A46A] mx-auto" />
-                      <p className="text-xs font-semibold text-[#333333]">
+                      <p className="text-xs font-semibold text-[#1A1A1A]">
                         Klik untuk memilih foto struk / bukti mutasi
                       </p>
                       <p className="text-[10px] text-gray-400">
@@ -697,7 +695,7 @@ export default function CustomerPaymentPage() {
 
               {/* Sender Notes */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-[#333333]">
+                <label className="text-xs font-semibold text-[#1A1A1A]">
                   Catatan Pengirim (Nama Pemilik Rekening / No Referensi)
                 </label>
                 <input
@@ -705,23 +703,23 @@ export default function CustomerPaymentPage() {
                   value={senderNotes}
                   onChange={(e) => setSenderNotes(e.target.value)}
                   placeholder="Contoh: Transfer m-BCA a/n Budi Santoso"
-                  className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-[#C8A46A]"
+                  className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-[#C8A46A]"
                 />
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E8DED0]">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E8E2D8]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition"
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 rounded-xl text-xs font-semibold bg-[#C8A46A] hover:bg-[#b59157] text-white shadow-sm transition disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl text-xs font-semibold bg-[#C8A46A] hover:bg-[#b59157] text-white shadow-xs transition disabled:opacity-50 cursor-pointer"
                 >
                   {isSubmitting ? 'Mengirim...' : 'Kirim Bukti Pembayaran'}
                 </button>
@@ -734,12 +732,12 @@ export default function CustomerPaymentPage() {
       {/* MODAL: IMAGE PREVIEW */}
       {previewImage && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-[#E8DED0] shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-[#E8DED0]">
-              <h4 className="font-bold text-sm text-[#333333]">Bukti Pembayaran</h4>
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 border border-[#E8E2D8] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E8E2D8]">
+              <h4 className="font-bold text-sm text-[#1A1A1A]">Bukti Pembayaran</h4>
               <button
                 onClick={() => setPreviewImage(null)}
-                className="p-1 rounded-lg hover:bg-gray-100 text-gray-500"
+                className="p-1 rounded-lg hover:bg-gray-100 text-gray-500 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -756,7 +754,7 @@ export default function CustomerPaymentPage() {
             <div className="flex justify-end">
               <button
                 onClick={() => setPreviewImage(null)}
-                className="px-4 py-2 rounded-xl bg-[#333333] text-white text-xs font-semibold"
+                className="px-4 py-2 rounded-xl bg-[#1A1A1A] text-white text-xs font-semibold cursor-pointer"
               >
                 Tutup
               </button>

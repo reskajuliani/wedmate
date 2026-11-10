@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { CustomerSidebar } from '@/components/CustomerSidebar';
 import { CustomerHeader } from '@/components/CustomerHeader';
 
 export const metadata = {
@@ -81,9 +82,17 @@ export default async function CustomerLayout({
   // Admin allowed to preview or route back to admin
   if (userRole === 'ADMIN') {
     return (
-      <div className="min-h-screen bg-[#F8F5EF] flex flex-col">
-        <CustomerHeader />
-        <main className="flex-1">{children}</main>
+      <div className="min-h-screen bg-[#FAF8F5] flex">
+        {/* Desktop Sidebar (3 core menus) */}
+        <div className="hidden md:block fixed inset-y-0 left-0 z-30">
+          <CustomerSidebar />
+        </div>
+
+        {/* Content area */}
+        <div className="flex-1 md:pl-64 flex flex-col min-h-screen">
+          <CustomerHeader />
+          <main className="flex-1 bg-[#FAF8F5] text-[#1A1A1A]">{children}</main>
+        </div>
       </div>
     );
   }
@@ -95,9 +104,17 @@ export default async function CustomerLayout({
     }
 
     return (
-      <div className="min-h-screen bg-[#F8F5EF] flex flex-col">
-        <CustomerHeader />
-        <main className="flex-1">{children}</main>
+      <div className="min-h-screen bg-[#FAF8F5] flex">
+        {/* Desktop Sidebar (3 core menus) */}
+        <div className="hidden md:block fixed inset-y-0 left-0 z-30">
+          <CustomerSidebar />
+        </div>
+
+        {/* Content area */}
+        <div className="flex-1 md:pl-64 flex flex-col min-h-screen">
+          <CustomerHeader />
+          <main className="flex-1 bg-[#FAF8F5] text-[#1A1A1A]">{children}</main>
+        </div>
       </div>
     );
   }

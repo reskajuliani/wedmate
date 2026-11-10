@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { demoStore } from '@/lib/demo-store';
+import { supabaseService } from '@/lib/supabase-service';
 import { WeddingProject, WeddingTask, TaskStatus } from '@/lib/types';
 import { formatDateIndo } from '@/lib/utils';
 import {
@@ -68,8 +69,10 @@ export default function AdminProjectsPage() {
 
   // Subscribe to demo store
   useEffect(() => {
-    const refreshData = () => {
-      const all = demoStore.getProjects();
+    let isMounted = true;
+    const refreshData = async () => {
+      const all = await supabaseService.getProjects();
+      if (!isMounted) return;
       setProjects(all);
       if (all.length > 0 && !expandedProjectId) {
         setExpandedProjectId(all[0].id);
@@ -78,7 +81,10 @@ export default function AdminProjectsPage() {
 
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
-    return unsub;
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, [expandedProjectId]);
 
   const showNotification = (msg: string) => {
@@ -86,21 +92,21 @@ export default function AdminProjectsPage() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  const handleToggleTask = (task: WeddingTask) => {
+  const handleToggleTask = async (task: WeddingTask) => {
     const nextStatus: TaskStatus = task.status === 'COMPLETED' ? 'TODO' : 'COMPLETED';
-    demoStore.updateTaskStatus(task.id, nextStatus);
+    await supabaseService.updateTaskStatus(task.id, nextStatus);
   };
 
-  const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
-    demoStore.updateTaskStatus(taskId, newStatus);
+  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+    await supabaseService.updateTaskStatus(taskId, newStatus);
   };
 
-  const handleDeleteTask = (taskId: string) => {
-    demoStore.deleteTask(taskId);
+  const handleDeleteTask = async (taskId: string) => {
+    await supabaseService.deleteTask(taskId);
     showNotification('Tugas berhasil dihapus dari checklist.');
   };
 
-  const handleCreateTask = (e: React.FormEvent) => {
+  const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -111,7 +117,7 @@ export default function AdminProjectsPage() {
     if (!targetProjectForTask) return;
 
     const existingTasks = demoStore.getTasksByProjectId(targetProjectForTask.id);
-    demoStore.createTask({
+    await supabaseService.createTask({
       project_id: targetProjectForTask.id,
       title: newTaskTitle.trim(),
       description: newTaskDescription.trim() || undefined,
@@ -256,7 +262,7 @@ export default function AdminProjectsPage() {
         {filteredProjects.length === 0 ? (
           <EmptyState
             icon={ListTodo}
-            title="Belum Ada Proyek Pernikahan Aktif"
+            title="Belum ada data tersedia"
             description="Proyek pernikahan otomatis diinisiasi dan muncul di sini begitu Anda mengonfirmasi booking klien di tab Pengajuan Booking."
             actionLabel="Buka Pengajuan Booking"
             actionHref="/admin/approvals?tab=bookings"

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { demoStore } from '@/lib/demo-store';
+import { supabaseService } from '@/lib/supabase-service';
 import { WeddingPackage } from '@/lib/types';
 import { formatRupiah, formatDateIndo } from '@/lib/utils';
 import {
@@ -64,10 +65,11 @@ export default function AdminPackagesPage() {
   // Delete Confirmation Modal
   const [deleteTarget, setDeleteTarget] = useState<WeddingPackage | null>(null);
 
-  // Subscribe to demo store
+  // Subscribe to demo store and fetch from supabaseService
   useEffect(() => {
-    const refreshData = () => {
-      setPackages(demoStore.getPackages());
+    const refreshData = async () => {
+      const allPkgs = await supabaseService.getPackages(false);
+      setPackages(allPkgs);
     };
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
@@ -138,7 +140,7 @@ export default function AdminPackagesPage() {
     setFormFeatures(formFeatures.filter((_, i) => i !== index));
   };
 
-  const handleSavePackage = (e: React.FormEvent) => {
+  const handleSavePackage = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -164,29 +166,21 @@ export default function AdminPackagesPage() {
     }
 
     try {
+      await supabaseService.savePackage({
+        id: editingPackageId || undefined,
+        name: formName.trim(),
+        slug: formSlug.trim(),
+        price: formPrice,
+        estimated_guests: formGuests,
+        description: formDescription.trim(),
+        features: formFeatures,
+        image_url: formImageUrl,
+        is_active: formIsActive,
+      });
+
       if (editingPackageId) {
-        demoStore.updatePackage(editingPackageId, {
-          name: formName.trim(),
-          slug: formSlug.trim(),
-          price: formPrice,
-          estimated_guests: formGuests,
-          description: formDescription.trim(),
-          features: formFeatures,
-          image_url: formImageUrl,
-          is_active: formIsActive,
-        });
         showNotification(`Paket "${formName}" berhasil diperbarui!`);
       } else {
-        demoStore.createPackage({
-          name: formName.trim(),
-          slug: formSlug.trim(),
-          price: formPrice,
-          estimated_guests: formGuests,
-          description: formDescription.trim(),
-          features: formFeatures,
-          image_url: formImageUrl,
-          is_active: formIsActive,
-        });
         showNotification(`Paket baru "${formName}" berhasil ditambahkan ke katalog!`);
       }
       setIsModalOpen(false);
@@ -195,18 +189,21 @@ export default function AdminPackagesPage() {
     }
   };
 
-  const handleToggleActive = (pkg: WeddingPackage) => {
+  const handleToggleActive = async (pkg: WeddingPackage) => {
     const updatedStatus = !pkg.is_active;
-    demoStore.updatePackage(pkg.id, { is_active: updatedStatus });
+    await supabaseService.savePackage({
+      ...pkg,
+      is_active: updatedStatus,
+    });
     showNotification(
       `Paket "${pkg.name}" kini ${updatedStatus ? 'AKTIF dan tampil di katalog' : 'DINONAKTIFKAN'}`
     );
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     const name = deleteTarget.name;
-    demoStore.deletePackage(deleteTarget.id);
+    await supabaseService.deletePackage(deleteTarget.id);
     setDeleteTarget(null);
     showNotification(`Paket "${name}" telah dihapus dari sistem.`);
   };
@@ -363,7 +360,7 @@ export default function AdminPackagesPage() {
         {filteredPackages.length === 0 ? (
           <EmptyState
             icon={Package}
-            title="Tidak Ada Paket Ditemukan"
+            title="Belum ada data tersedia"
             description="Tidak ada paket yang cocok dengan filter atau kata kunci pencarian saat ini."
             actionLabel="Reset Filter Pencarian"
             onAction={() => {

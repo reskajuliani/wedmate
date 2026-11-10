@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { demoStore } from '@/lib/demo-store';
+import { supabaseService } from '@/lib/supabase-service';
 import { UserProfile, AccountStatus, Booking, BookingStatus } from '@/lib/types';
 import { formatRupiah, formatDateIndo, formatDateTimeIndo } from '@/lib/utils';
 import {
@@ -79,12 +80,13 @@ function AdminApprovalsContent() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Subscribe to demoStore updates
+  // Subscribe to updates & fetch via supabaseService
   useEffect(() => {
-    const refreshData = () => {
-      const allCustomers = demoStore.getUsers().filter((u) => u.role === 'CUSTOMER');
+    const refreshData = async () => {
+      const allCustomers = await supabaseService.getProfiles('CUSTOMER');
       setUsers(allCustomers);
-      setBookings(demoStore.getBookings());
+      const allBookings = await supabaseService.getBookings();
+      setBookings(allBookings);
     };
 
     refreshData();
@@ -97,8 +99,8 @@ function AdminApprovalsContent() {
   const pendingBookingsCount = bookings.filter((b) => b.status === 'PENDING').length;
 
   // --- ACCOUNT ACTIONS ---
-  const handleApproveAccount = (targetUser: UserProfile) => {
-    demoStore.updateUserStatus(targetUser.id, 'APPROVED');
+  const handleApproveAccount = async (targetUser: UserProfile) => {
+    await supabaseService.updateProfileStatus(targetUser.id, 'APPROVED');
     showToast(`Akun ${targetUser.full_name} berhasil DISETUJUI! Customer kini dapat login ke portal.`);
   };
 
@@ -107,19 +109,20 @@ function AdminApprovalsContent() {
     setRejectReason('Data kontak atau tanggal pernikahan belum valid.');
   };
 
-  const handleConfirmRejectAccount = () => {
+  const handleConfirmRejectAccount = async () => {
     if (!rejectModalUser) return;
-    demoStore.updateUserStatus(rejectModalUser.id, 'REJECTED', rejectReason.trim());
+    await supabaseService.updateProfileStatus(rejectModalUser.id, 'REJECTED', rejectReason.trim());
     showToast(`Pendaftaran akun ${rejectModalUser.full_name} DITOLAK.`);
     setRejectModalUser(null);
   };
 
   // --- BOOKING ACTIONS ---
-  const handleConfirmBooking = (target: Booking | string) => {
+  const handleConfirmBooking = async (target: Booking | string) => {
     const booking = typeof target === 'string' ? bookings.find((b) => b.id === target) : target;
     if (!booking) return;
     try {
-      const result = demoStore.confirmBooking(booking.id, adminId);
+      demoStore.confirmBooking(booking.id, adminId);
+      await supabaseService.updateBookingStatus(booking.id, 'CONFIRMED');
       showToast(
         `Booking ${booking.id} berhasil DIKONFIRMASI! Proyek checklist dan invoice pembayaran otomatis diterbitkan.`
       );
@@ -139,9 +142,10 @@ function AdminApprovalsContent() {
     }
   };
 
-  const handleConfirmCancelBooking = () => {
+  const handleConfirmCancelBooking = async () => {
     if (!cancelBookingTarget) return;
     demoStore.cancelBooking(cancelBookingTarget.id, cancelBookingReason.trim());
+    await supabaseService.updateBookingStatus(cancelBookingTarget.id, 'CANCELLED', cancelBookingReason.trim());
     showToast(`Pengajuan booking ${cancelBookingTarget.id} berhasil DIBATALKAN.`);
     setCancelBookingTarget(null);
   };
@@ -177,7 +181,7 @@ function AdminApprovalsContent() {
     <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Work Screen Header */}
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8DED0] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8E2D8] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs uppercase font-semibold text-[#C8A46A] tracking-widest">
@@ -189,26 +193,26 @@ function AdminApprovalsContent() {
                 Work Screen Tunggal
               </span>
             </div>
-            <h1 className="font-serif text-3xl font-bold text-[#333333]">
-              Persetujuan Akun & Pengajuan Booking
+            <h1 className="font-serif text-3xl font-bold text-[#1A1A1A]">
+              Persetujuan Akun &amp; Pengajuan Booking
             </h1>
-            <p className="text-xs text-[#333333]/70 mt-1">
+            <p className="text-xs text-[#1A1A1A]/70 mt-1">
               Kelola verifikasi registrasi akun pengantin baru dan konfirmasi reservasi booking paket pernikahan dalam satu layar kerja terpadu.
             </p>
           </div>
 
           {/* Stat Badges */}
           <div className="flex items-center gap-3">
-            <div className="bg-[#FAF8F5] border border-[#E8DED0] px-4 py-3 rounded-2xl text-center min-w-[110px]">
-              <span className="text-[10px] uppercase font-semibold text-[#333333]/60 block">
+            <div className="bg-[#FAF8F5] border border-[#E8E2D8] px-4 py-3 rounded-2xl text-center min-w-[110px]">
+              <span className="text-[10px] uppercase font-semibold text-[#1A1A1A]/60 block">
                 Pending Akun
               </span>
               <span className="text-xl font-bold font-serif text-amber-600">
                 {pendingAccountsCount}
               </span>
             </div>
-            <div className="bg-[#FAF8F5] border border-[#E8DED0] px-4 py-3 rounded-2xl text-center min-w-[110px]">
-              <span className="text-[10px] uppercase font-semibold text-[#333333]/60 block">
+            <div className="bg-[#FAF8F5] border border-[#E8E2D8] px-4 py-3 rounded-2xl text-center min-w-[110px]">
+              <span className="text-[10px] uppercase font-semibold text-[#1A1A1A]/60 block">
                 Pending Booking
               </span>
               <span className="text-xl font-bold font-serif text-[#C8A46A]">
@@ -221,7 +225,7 @@ function AdminApprovalsContent() {
         {/* Toast Notification */}
         {toastMessage && (
           <div
-            className={`p-4 rounded-2xl border text-xs font-semibold flex items-center gap-3 animate-fadeIn shadow-sm ${
+            className={`p-4 rounded-2xl border text-xs font-semibold flex items-center gap-3 animate-fadeIn shadow-xs ${
               toastMessage.type === 'success'
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 : 'bg-red-50 text-red-800 border-red-200'
@@ -237,26 +241,22 @@ function AdminApprovalsContent() {
         )}
 
         {/* WORK SCREEN TABS */}
-        <div className="flex items-center gap-3 border-b border-[#E8DED0] pb-2">
+        <div className="flex items-center gap-3 border-b border-[#E8E2D8] pb-2">
           <button
             onClick={() => {
               setActiveMainTab('accounts');
               router.replace('/admin/approvals?tab=accounts');
             }}
-            className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl font-semibold text-sm transition-all ${
+            className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl font-semibold text-sm transition-all cursor-pointer ${
               activeMainTab === 'accounts'
-                ? 'bg-[#C8A46A] text-white shadow-sm'
-                : 'bg-white text-[#333333]/70 hover:text-[#333333] hover:bg-[#F8F5EF] border border-[#E8DED0]'
+                ? 'bg-[#C8A46A] text-white shadow-xs'
+                : 'bg-white text-[#1A1A1A]/70 hover:text-[#1A1A1A] hover:bg-[#FAF8F5] border border-[#E8E2D8]'
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Persetujuan Akun</span>
+            <span>Verifikasi Akun Klien</span>
             {pendingAccountsCount > 0 && (
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                  activeMainTab === 'accounts' ? 'bg-white text-[#C8A46A]' : 'bg-amber-100 text-amber-800'
-                }`}
-              >
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
                 {pendingAccountsCount}
               </span>
             )}
@@ -267,20 +267,16 @@ function AdminApprovalsContent() {
               setActiveMainTab('bookings');
               router.replace('/admin/approvals?tab=bookings');
             }}
-            className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl font-semibold text-sm transition-all ${
+            className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl font-semibold text-sm transition-all cursor-pointer ${
               activeMainTab === 'bookings'
-                ? 'bg-[#C8A46A] text-white shadow-sm'
-                : 'bg-white text-[#333333]/70 hover:text-[#333333] hover:bg-[#F8F5EF] border border-[#E8DED0]'
+                ? 'bg-[#C8A46A] text-white shadow-xs'
+                : 'bg-white text-[#1A1A1A]/70 hover:text-[#1A1A1A] hover:bg-[#FAF8F5] border border-[#E8E2D8]'
             }`}
           >
             <CalendarDays className="w-4 h-4" />
-            <span>Pengajuan Booking</span>
+            <span>Konfirmasi Booking Acara</span>
             {pendingBookingsCount > 0 && (
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                  activeMainTab === 'bookings' ? 'bg-white text-[#C8A46A]' : 'bg-[#C8A46A] text-white'
-                }`}
-              >
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#C8A46A] text-white">
                 {pendingBookingsCount}
               </span>
             )}
@@ -291,39 +287,39 @@ function AdminApprovalsContent() {
               setActiveMainTab('calendar');
               router.replace('/admin/approvals?tab=calendar');
             }}
-            className={`flex items-center px-6 py-3 rounded-2xl font-semibold text-sm transition-all ${
+            className={`hidden sm:flex items-center gap-2 px-5 py-3 rounded-2xl font-semibold text-sm transition-all cursor-pointer ${
               activeMainTab === 'calendar'
-                ? 'bg-[#C8A46A] text-white shadow-sm'
-                : 'bg-white text-[#333333]/70 hover:text-[#333333] hover:bg-[#F8F5EF] border border-[#E8DED0]'
+                ? 'bg-[#1A1A1A] text-white shadow-xs'
+                : 'bg-white text-[#1A1A1A]/70 hover:text-[#1A1A1A] hover:bg-[#FAF8F5] border border-[#E8E2D8]'
             }`}
           >
-            <Calendar className="w-4 h-4 mr-2" />
-            <span>Kalender Jadwal Acara</span>
+            <Calendar className="w-4 h-4 text-[#C8A46A]" />
+            <span>Kalender Jadwal</span>
           </button>
         </div>
 
-        {/* TAB 1: PERSETUJUAN AKUN */}
+        {/* TAB 1: VERIFIKASI AKUN KLEN */}
         {activeMainTab === 'accounts' && (
           <div className="space-y-6">
             {/* Filter and Search Bar */}
-            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E8DED0] flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="bg-white p-4 sm:p-6 rounded-3xl border border-[#E8E2D8] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
               {/* Status Filter Pills */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
                 {(
                   [
-                    { key: 'ALL', label: 'Semua Akun' },
-                    { key: 'PENDING', label: 'Menunggu Review' },
-                    { key: 'APPROVED', label: 'Disetujui' },
-                    { key: 'REJECTED', label: 'Ditolak' },
+                    { key: 'ALL', label: `Semua (${users.length})` },
+                    { key: 'PENDING', label: `Menunggu Review (${pendingAccountsCount})` },
+                    { key: 'APPROVED', label: `Disetujui (${users.filter((u) => u.status === 'APPROVED').length})` },
+                    { key: 'REJECTED', label: `Ditolak (${users.filter((u) => u.status === 'REJECTED').length})` },
                   ] as const
                 ).map((tab) => (
                   <button
                     key={tab.key}
                     onClick={() => setAccountStatusFilter(tab.key)}
-                    className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                       accountStatusFilter === tab.key
-                        ? 'bg-[#333333] text-white shadow-xs'
-                        : 'bg-[#F8F5EF] text-[#333333]/70 hover:text-[#333333] border border-[#E8DED0]'
+                        ? 'bg-[#1A1A1A] text-white shadow-xs'
+                        : 'bg-[#FAF8F5] text-[#1A1A1A]/70 hover:text-[#1A1A1A] border border-[#E8E2D8]'
                     }`}
                   >
                     {tab.label}
@@ -339,7 +335,7 @@ function AdminApprovalsContent() {
                   value={accountSearch}
                   onChange={(e) => setAccountSearch(e.target.value)}
                   placeholder="Cari nama, email, no HP..."
-                  className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#F8F5EF] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-[#C8A46A]"
+                  className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-[#C8A46A]"
                 />
               </div>
             </div>
@@ -348,7 +344,7 @@ function AdminApprovalsContent() {
             {filteredUsers.length === 0 ? (
               <EmptyState
                 icon={Users}
-                title="Tidak Ada Akun Ditemukan"
+                title="Belum ada data tersedia"
                 description={
                   accountSearch || accountStatusFilter !== 'ALL'
                     ? 'Tidak ada akun calon pengantin yang cocok dengan kriteria filter saat ini.'
@@ -361,108 +357,90 @@ function AdminApprovalsContent() {
                 }}
               />
             ) : (
-              <div className="bg-white rounded-3xl border border-[#E8DED0] overflow-hidden shadow-xs">
+              <div className="bg-white rounded-3xl border border-[#E8E2D8] overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-[#FAF8F5] border-b border-[#E8DED0] text-[#333333]/60 font-semibold uppercase tracking-wider text-[11px]">
+                    <thead className="bg-[#FAF8F5] border-b border-[#E8E2D8] text-[#1A1A1A]/60 font-semibold uppercase tracking-wider text-[11px]">
                       <tr>
                         <th className="py-4 px-6">Calon Pengantin</th>
                         <th className="py-4 px-6">Kontak</th>
-                        <th className="py-4 px-6">Tanggal Pernikahan</th>
-                        <th className="py-4 px-6">Terdaftar Pada</th>
+                        <th className="py-4 px-6">Tgl Registrasi</th>
                         <th className="py-4 px-6">Status Akun</th>
-                        <th className="py-4 px-6 text-right">Tindakan</th>
+                        <th className="py-4 px-6 text-right">Tindakan Admin</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#E8DED0]">
+                    <tbody className="divide-y divide-[#E8E2D8]">
                       {filteredUsers.map((item) => (
                         <tr key={item.id} className="hover:bg-[#FAF8F5]/60 transition">
                           <td className="py-4 px-6">
-                            <div className="font-semibold text-[#333333] text-sm">{item.full_name}</div>
-                            <span className="text-[10px] text-gray-400 font-mono">ID: {item.id.slice(0, 8)}...</span>
+                            <div className="font-semibold text-[#1A1A1A] text-sm">{item.full_name}</div>
+                            {item.notes && (
+                              <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">
+                                Catatan: {item.notes}
+                              </p>
+                            )}
                           </td>
-                          <td className="py-4 px-6">
-                            <div className="flex items-center gap-1.5 text-gray-600 mb-1">
+                          <td className="py-4 px-6 space-y-1">
+                            <div className="flex items-center gap-1.5 text-gray-600">
                               <Mail className="w-3.5 h-3.5 text-[#C8A46A]" />
                               <span>{item.email}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-gray-600">
+                            <div className="flex items-center gap-1.5 font-medium text-[#1A1A1A]">
                               <Phone className="w-3.5 h-3.5 text-[#C8A46A]" />
-                              <span>{item.phone}</span>
+                              <span>{item.phone || '-'}</span>
                             </div>
-                          </td>
-                          <td className="py-4 px-6">
-                            {item.wedding_date ? (
-                              <div className="flex items-center gap-1.5 font-medium text-[#333333]">
-                                <Calendar className="w-3.5 h-3.5 text-[#C8A46A]" />
-                                <span>{formatDateIndo(item.wedding_date)}</span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 italic">Belum ditentukan</span>
-                            )}
                           </td>
                           <td className="py-4 px-6 text-gray-500">
                             {formatDateTimeIndo(item.created_at)}
                           </td>
                           <td className="py-4 px-6">
                             {item.status === 'APPROVED' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                 DISETUJUI
                               </span>
                             ) : item.status === 'REJECTED' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-800">
-                                <XCircle className="w-3 h-3 text-red-600" />
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                                <XCircle className="w-3.5 h-3.5 text-red-600" />
                                 DITOLAK
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 animate-pulse">
-                                <Clock className="w-3 h-3 text-amber-600" />
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 animate-pulse">
+                                <Clock className="w-3.5 h-3.5 text-amber-600" />
                                 MENUNGGU REVIEW
                               </span>
                             )}
-                            {item.notes && item.status === 'REJECTED' && (
-                              <p className="text-[10px] text-red-700 mt-1 max-w-xs">{item.notes}</p>
-                            )}
                           </td>
                           <td className="py-4 px-6 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {item.status === 'PENDING' && (
-                                <>
-                                  <button
-                                    onClick={() => handleApproveAccount(item)}
-                                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition shadow-xs flex items-center gap-1"
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                    <span>Setujui</span>
-                                  </button>
-                                  <button
-                                    onClick={() => handleOpenRejectAccount(item)}
-                                    className="px-3 py-1.5 rounded-xl bg-white border border-red-300 hover:bg-red-50 text-red-600 font-semibold text-xs transition flex items-center gap-1"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                    <span>Tolak</span>
-                                  </button>
-                                </>
-                              )}
-                              {item.status === 'APPROVED' && (
-                                <button
-                                  onClick={() => handleOpenRejectAccount(item)}
-                                  className="px-3 py-1.5 rounded-xl bg-white border border-[#E8DED0] hover:bg-red-50 hover:text-red-600 text-gray-500 font-medium text-xs transition"
-                                >
-                                  Tangguhkan
-                                </button>
-                              )}
-                              {item.status === 'REJECTED' && (
+                            {item.status === 'PENDING' ? (
+                              <div className="flex items-center justify-end gap-2">
                                 <button
                                   onClick={() => handleApproveAccount(item)}
-                                  className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-semibold text-xs transition flex items-center gap-1"
+                                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition shadow-xs flex items-center gap-1 cursor-pointer"
                                 >
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                  <span>Setujui Kembali</span>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Setujui</span>
                                 </button>
-                              )}
-                            </div>
+                                <button
+                                  onClick={() => handleOpenRejectAccount(item)}
+                                  className="px-3.5 py-1.5 rounded-xl bg-white border border-red-300 hover:bg-red-50 text-red-600 font-semibold text-xs transition flex items-center gap-1 cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Tolak</span>
+                                </button>
+                              </div>
+                            ) : item.status === 'APPROVED' ? (
+                              <span className="text-[11px] text-emerald-700 font-medium">
+                                ✓ Akun Aktif
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleApproveAccount(item)}
+                                className="text-xs text-[#C8A46A] hover:underline font-semibold cursor-pointer"
+                              >
+                                Pulihkan Akun
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -474,29 +452,28 @@ function AdminApprovalsContent() {
           </div>
         )}
 
-        {/* TAB 2: PENGAJUAN BOOKING */}
+        {/* TAB 2: KONFIRMASI BOOKING ACARA */}
         {activeMainTab === 'bookings' && (
           <div className="space-y-6">
             {/* Filter and Search Bar */}
-            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E8DED0] flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="bg-white p-4 sm:p-6 rounded-3xl border border-[#E8E2D8] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
               {/* Status Filter Pills */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
                 {(
                   [
-                    { key: 'ALL', label: 'Semua Booking' },
-                    { key: 'PENDING', label: 'Menunggu Review' },
-                    { key: 'CONFIRMED', label: 'Terkonfirmasi' },
-                    { key: 'CANCELLED', label: 'Dibatalkan' },
-                    { key: 'COMPLETED', label: 'Selesai' },
+                    { key: 'ALL', label: `Semua Booking (${bookings.length})` },
+                    { key: 'PENDING', label: `Menunggu Konfirmasi (${pendingBookingsCount})` },
+                    { key: 'CONFIRMED', label: `Terkonfirmasi (${bookings.filter((b) => b.status === 'CONFIRMED').length})` },
+                    { key: 'CANCELLED', label: `Dibatalkan (${bookings.filter((b) => b.status === 'CANCELLED').length})` },
                   ] as const
                 ).map((tab) => (
                   <button
                     key={tab.key}
                     onClick={() => setBookingStatusFilter(tab.key)}
-                    className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+                    className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                       bookingStatusFilter === tab.key
-                        ? 'bg-[#333333] text-white shadow-xs'
-                        : 'bg-[#F8F5EF] text-[#333333]/70 hover:text-[#333333] border border-[#E8DED0]'
+                        ? 'bg-[#1A1A1A] text-white shadow-xs'
+                        : 'bg-[#FAF8F5] text-[#1A1A1A]/70 hover:text-[#1A1A1A] border border-[#E8E2D8]'
                     }`}
                   >
                     {tab.label}
@@ -512,7 +489,7 @@ function AdminApprovalsContent() {
                   value={bookingSearch}
                   onChange={(e) => setBookingSearch(e.target.value)}
                   placeholder="Cari ID, nama klien, paket, gedung..."
-                  className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#F8F5EF] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-[#C8A46A]"
+                  className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-[#C8A46A]"
                 />
               </div>
             </div>
@@ -521,7 +498,7 @@ function AdminApprovalsContent() {
             {filteredBookings.length === 0 ? (
               <EmptyState
                 icon={CalendarDays}
-                title="Tidak Ada Pengajuan Booking"
+                title="Belum ada data tersedia"
                 description={
                   bookingSearch || bookingStatusFilter !== 'ALL'
                     ? 'Tidak ada data reservasi booking yang sesuai dengan filter pencarian.'
@@ -538,10 +515,10 @@ function AdminApprovalsContent() {
                 {filteredBookings.map((b) => (
                   <div
                     key={b.id}
-                    className="bg-white rounded-3xl p-6 border border-[#E8DED0] shadow-xs hover:border-[#C8A46A] transition space-y-4"
+                    className="bg-white rounded-3xl p-6 border border-[#E8E2D8] shadow-xs hover:border-[#C8A46A] transition space-y-4"
                   >
                     {/* Top line: ID, status, date */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E8DED0]">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E8E2D8]">
                       <div className="flex items-center gap-3">
                         {b.status === 'CONFIRMED' ? (
                           <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
@@ -566,37 +543,38 @@ function AdminApprovalsContent() {
                         )}
                         <span className="text-xs font-mono text-gray-400">ID: {b.id}</span>
                       </div>
+
                       <span className="text-xs text-gray-500">
-                        Diajukan pada: <strong className="text-[#333333]">{formatDateTimeIndo(b.created_at)}</strong>
+                        Diajukan pada: <strong className="text-[#1A1A1A]">{formatDateTimeIndo(b.created_at)}</strong>
                       </span>
                     </div>
 
-                    {/* Main columns */}
+                    {/* Middle grid */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                      {/* Col 1: Client */}
+                      {/* Col 1: Customer */}
                       <div className="space-y-1">
                         <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
-                          Klien Pemesan
+                          Data Calon Pengantin
                         </span>
-                        <div className="font-serif text-lg font-bold text-[#333333]">
-                          {b.customer?.full_name || 'Pelanggan'}
+                        <div className="font-serif text-lg font-bold text-[#1A1A1A]">
+                          {b.customer?.full_name || 'Klien WEDMATE'}
                         </div>
                         <div className="text-xs text-gray-600 flex items-center gap-1">
                           <Phone className="w-3.5 h-3.5 text-[#C8A46A]" />
                           <span>{b.customer?.phone || '-'}</span>
                         </div>
-                        <div className="text-xs text-gray-600 flex items-center gap-1">
+                        <div className="text-xs text-gray-500 flex items-center gap-1">
                           <Mail className="w-3.5 h-3.5 text-[#C8A46A]" />
-                          <span>{b.customer?.email || '-'}</span>
+                          <span className="truncate">{b.customer?.email}</span>
                         </div>
                       </div>
 
                       {/* Col 2: Package */}
                       <div className="space-y-1">
                         <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
-                          Paket Wedding
+                          Paket Dipilih
                         </span>
-                        <div className="font-serif text-lg font-bold text-[#333333]">
+                        <div className="font-serif text-lg font-bold text-[#1A1A1A]">
                           {b.package?.name || 'Paket Pilihan'}
                         </div>
                         <div className="text-sm font-bold font-serif text-[#C8A46A]">
@@ -610,27 +588,27 @@ function AdminApprovalsContent() {
                       {/* Col 3: Date & Venue */}
                       <div className="space-y-1">
                         <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
-                          Jadwal & Lokasi Acara
+                          Jadwal &amp; Lokasi Acara
                         </span>
-                        <div className="text-xs font-bold text-[#333333] flex items-center gap-1.5">
+                        <div className="text-xs font-bold text-[#1A1A1A] flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-[#C8A46A]" />
                           <span>{formatDateIndo(b.wedding_date)}</span>
                         </div>
                         <div className="text-xs text-gray-600 flex items-start gap-1.5">
                           <MapPin className="w-3.5 h-3.5 text-[#C8A46A] shrink-0 mt-0.5" />
                           <div>
-                            <strong className="block text-[#333333]">{b.venue_name}</strong>
+                            <strong className="block text-[#1A1A1A]">{b.venue_name}</strong>
                             <span className="text-gray-500 line-clamp-1">{b.venue_address}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Col 4: Quick Actions */}
-                      <div className="flex flex-col justify-between gap-3 bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8DED0]">
+                      <div className="flex flex-col justify-between gap-3 bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8E2D8]">
                         <div className="text-xs text-gray-500">
                           {b.status === 'PENDING' ? (
                             <span className="text-amber-800 font-medium">
-                              Menunggu persetujuan admin untuk aktivasi project checklist & invoice.
+                              Menunggu persetujuan admin untuk aktivasi project checklist &amp; invoice.
                             </span>
                           ) : b.status === 'CONFIRMED' ? (
                             <span className="text-emerald-800 font-medium">
@@ -641,10 +619,10 @@ function AdminApprovalsContent() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 pt-2 border-t border-[#E8DED0]">
+                        <div className="flex items-center gap-2 pt-2 border-t border-[#E8E2D8]">
                           <button
                             onClick={() => setDetailBooking(b)}
-                            className="p-2 rounded-xl bg-white border border-[#E8DED0] hover:bg-[#F8F5EF] text-gray-600 transition"
+                            className="p-2 rounded-xl bg-white border border-[#E8E2D8] hover:bg-[#FAF8F5] text-gray-600 transition cursor-pointer"
                             title="Detail Rincian"
                           >
                             <Eye className="w-4 h-4" />
@@ -654,14 +632,14 @@ function AdminApprovalsContent() {
                             <>
                               <button
                                 onClick={() => handleConfirmBooking(b)}
-                                className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition shadow-xs flex items-center justify-center gap-1"
+                                className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition shadow-xs flex items-center justify-center gap-1 cursor-pointer"
                               >
                                 <Check className="w-3.5 h-3.5" />
                                 <span>Konfirmasi</span>
                               </button>
                               <button
                                 onClick={() => handleOpenCancelBooking(b)}
-                                className="py-2 px-3 rounded-xl bg-white border border-red-300 hover:bg-red-50 text-red-600 font-semibold text-xs transition flex items-center justify-center gap-1"
+                                className="py-2 px-3 rounded-xl bg-white border border-red-300 hover:bg-red-50 text-red-600 font-semibold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
                               >
                                 <X className="w-3.5 h-3.5" />
                                 <span>Tolak</span>
@@ -680,7 +658,7 @@ function AdminApprovalsContent() {
                               </Link>
                               <Link
                                 href="/admin/payments"
-                                className="flex-1 py-2 px-2.5 rounded-xl bg-white border border-[#E8DED0] hover:bg-[#F8F5EF] text-[#333333] font-semibold text-xs transition text-center flex items-center justify-center gap-1"
+                                className="flex-1 py-2 px-2.5 rounded-xl bg-white border border-[#E8DED0] hover:bg-[#FAF8F5] text-[#1A1A1A] font-semibold text-xs transition text-center flex items-center justify-center gap-1"
                               >
                                 <CreditCard className="w-3.5 h-3.5" />
                                 <span>Tagihan</span>
@@ -713,15 +691,15 @@ function AdminApprovalsContent() {
       {/* MODAL: Reject Account */}
       {rejectModalUser && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-[#E8DED0] shadow-xl space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-[#E8E2D8] shadow-xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E8E2D8]">
               <div className="flex items-center gap-2 text-red-600 font-bold text-base">
                 <AlertTriangle className="w-5 h-5" />
                 <span>Tolak Pendaftaran Akun</span>
               </div>
               <button
                 onClick={() => setRejectModalUser(null)}
-                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -729,31 +707,31 @@ function AdminApprovalsContent() {
 
             <p className="text-xs text-gray-600">
               Anda akan menolak registrasi atas nama{' '}
-              <strong className="text-[#333333]">{rejectModalUser.full_name}</strong>{' '}
+              <strong className="text-[#1A1A1A]">{rejectModalUser.full_name}</strong>{' '}
               ({rejectModalUser.email}). Customer tidak dapat mengakses dashboard booking.
             </p>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#333333]">Alasan Penolakan</label>
+              <label className="text-xs font-semibold text-[#1A1A1A]">Alasan Penolakan</label>
               <textarea
                 rows={3}
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 placeholder="Tulis alasan penolakan untuk customer..."
-                className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-red-400"
+                className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-red-400"
               />
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 onClick={() => setRejectModalUser(null)}
-                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition"
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition cursor-pointer"
               >
                 Batal
               </button>
               <button
                 onClick={handleConfirmRejectAccount}
-                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-sm transition"
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs transition cursor-pointer"
               >
                 Tolak Akun Ini
               </button>
@@ -765,15 +743,15 @@ function AdminApprovalsContent() {
       {/* MODAL: Cancel Booking */}
       {cancelBookingTarget && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-[#E8DED0] shadow-xl space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-[#E8E2D8] shadow-xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E8E2D8]">
               <div className="flex items-center gap-2 text-red-600 font-bold text-base">
                 <AlertTriangle className="w-5 h-5" />
                 <span>Batalkan Pengajuan Booking</span>
               </div>
               <button
                 onClick={() => setCancelBookingTarget(null)}
-                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -781,32 +759,32 @@ function AdminApprovalsContent() {
 
             <p className="text-xs text-gray-600">
               Anda akan membatalkan booking{' '}
-              <strong className="text-[#333333]">#{cancelBookingTarget.id}</strong>{' '}
+              <strong className="text-[#1A1A1A]">#{cancelBookingTarget.id}</strong>{' '}
               dari klien{' '}
-              <strong className="text-[#333333]">{cancelBookingTarget.customer?.full_name}</strong>.
+              <strong className="text-[#1A1A1A]">{cancelBookingTarget.customer?.full_name}</strong>.
             </p>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#333333]">Alasan Pembatalan</label>
+              <label className="text-xs font-semibold text-[#1A1A1A]">Alasan Pembatalan</label>
               <textarea
                 rows={3}
                 value={cancelBookingReason}
                 onChange={(e) => setCancelBookingReason(e.target.value)}
                 placeholder="Tulis alasan pembatalan..."
-                className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8DED0] rounded-xl focus:outline-none focus:border-red-400"
+                className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-red-400"
               />
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 onClick={() => setCancelBookingTarget(null)}
-                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition"
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition cursor-pointer"
               >
                 Kembali
               </button>
               <button
                 onClick={handleConfirmCancelBooking}
-                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-sm transition"
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs transition cursor-pointer"
               >
                 Batalkan Booking Ini
               </button>
@@ -818,33 +796,33 @@ function AdminApprovalsContent() {
       {/* MODAL: Booking Detail */}
       {detailBooking && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 border border-[#E8DED0] shadow-xl space-y-6">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E8DED0]">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 border border-[#E8E2D8] shadow-xl space-y-6">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E8E2D8]">
               <div>
                 <span className="text-[10px] uppercase font-semibold text-[#C8A46A] tracking-wider block">
                   Rincian Booking Pernikahan
                 </span>
-                <h3 className="font-serif text-xl font-bold text-[#333333]">
+                <h3 className="font-serif text-xl font-bold text-[#1A1A1A]">
                   {detailBooking.package?.name}
                 </h3>
               </div>
               <button
                 onClick={() => setDetailBooking(null)}
-                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8DED0]">
+              <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8]">
                 <span className="text-gray-400 block text-[10px] uppercase font-semibold">Nama Klien</span>
-                <span className="font-bold text-[#333333] text-sm">{detailBooking.customer?.full_name}</span>
+                <span className="font-bold text-[#1A1A1A] text-sm">{detailBooking.customer?.full_name}</span>
                 <span className="block text-gray-500 mt-0.5">{detailBooking.customer?.email}</span>
                 <span className="block text-gray-500">{detailBooking.customer?.phone}</span>
               </div>
 
-              <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8DED0]">
+              <div className="p-3 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8]">
                 <span className="text-gray-400 block text-[10px] uppercase font-semibold">Nilai Kontrak</span>
                 <span className="font-bold font-serif text-[#C8A46A] text-base">
                   {formatRupiah(detailBooking.total_price)}
@@ -853,24 +831,24 @@ function AdminApprovalsContent() {
               </div>
             </div>
 
-            <div className="p-4 bg-[#FAF8F5] rounded-xl border border-[#E8DED0] text-xs space-y-2">
+            <div className="p-4 bg-[#FAF8F5] rounded-xl border border-[#E8E2D8] text-xs space-y-2">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-[#C8A46A]" />
-                <span className="font-bold text-[#333333]">
+                <span className="font-bold text-[#1A1A1A]">
                   Tanggal Acara: {formatDateIndo(detailBooking.wedding_date)}
                 </span>
               </div>
               <div className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-[#C8A46A] shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold text-[#333333]">{detailBooking.venue_name}</span>
+                  <span className="font-bold text-[#1A1A1A]">{detailBooking.venue_name}</span>
                   <p className="text-gray-600 mt-0.5">{detailBooking.venue_address}</p>
                 </div>
               </div>
             </div>
 
             {detailBooking.notes && (
-              <div className="p-3 bg-white rounded-xl border border-[#E8DED0] text-xs">
+              <div className="p-3 bg-white rounded-xl border border-[#E8E2D8] text-xs">
                 <span className="text-gray-400 block text-[10px] uppercase font-semibold mb-1">
                   Catatan Tambahan dari Klien
                 </span>
@@ -881,7 +859,7 @@ function AdminApprovalsContent() {
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 onClick={() => setDetailBooking(null)}
-                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#333333] text-white hover:bg-black transition"
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-[#1A1A1A] text-white hover:bg-black transition cursor-pointer"
               >
                 Tutup Rincian
               </button>

@@ -117,7 +117,7 @@ export function AdminHeader() {
                   {badgeCount > 0 && (
                     <span
                       className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        active ? 'bg-white text-[#333333]' : 'bg-[#C8A46A] text-white'
+                        active ? 'bg-white text-[#1A1A1A]' : 'bg-[#C8A46A] text-white'
                       }`}
                     >
                       {badgeCount}
@@ -221,7 +221,7 @@ export function AdminHeader() {
                   {badgeCount > 0 && (
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        active ? 'bg-white text-[#333333]' : 'bg-[#C8A46A] text-white'
+                        active ? 'bg-white text-[#1A1A1A]' : 'bg-[#C8A46A] text-white'
                       }`}
                     >
                       {badgeCount}
