@@ -517,8 +517,8 @@ class DemoStore {
           },
           {
             project_id: newProject.id,
-            title: 'Technical Meeting & Gladi Resik Vendor di Lokasi',
-            description: 'Sinkronisasi rundown H-7 bersama semua vendor dan perwakilan keluarga.',
+            title: 'Technical Meeting & Gladi Resik Persiapan di Lokasi',
+            description: 'Sinkronisasi rundown H-7 bersama tim WO dan perwakilan keluarga.',
             category: 'Other',
             status: 'TODO',
             sort_order: 8,

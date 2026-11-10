@@ -72,28 +72,28 @@ export default async function WelcomeScreen() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8F5EF] flex items-center justify-center p-6 text-[#333333]">
-      <div className="w-full max-w-md bg-white border border-[#E8DED0] rounded-3xl p-8 sm:p-10 shadow-sm text-center">
+    <main className="min-h-screen bg-[#FAF8F5] flex items-center justify-center p-6 text-[#1A1A1A]">
+      <div className="w-full max-w-md bg-white border border-[#E8E2D8] rounded-3xl p-8 sm:p-10 shadow-sm text-center">
         {/* Brand Header */}
-        <div className="mb-8">
-          <span className="font-serif text-3xl font-bold tracking-wider text-[#C8A46A] block">
+        <div className="mb-6">
+          <span className="font-serif text-3xl sm:text-4xl font-bold tracking-wider text-[#C8A46A] block">
             WEDMATE
           </span>
-          <p className="text-xs text-[#333333]/60 italic font-serif mt-1">
+          <p className="text-xs text-[#1A1A1A]/60 italic font-serif mt-1">
             Plan Your Day, Cherish Your Moments.
           </p>
         </div>
 
         <div className="mb-8">
-          <h1 className="font-serif text-xl font-semibold mb-2">
-            Portal Layanan Pernikahan
+          <h1 className="font-serif text-xl sm:text-2xl font-semibold mb-2 text-[#1A1A1A]">
+            Portal Layanan &amp; Manajemen Pernikahan
           </h1>
-          <p className="text-xs text-[#333333]/70 leading-relaxed">
+          <p className="text-xs text-[#1A1A1A]/70 leading-relaxed">
             Akses sistem manajemen perencanaan pernikahan, reservasi paket, dan pelacakan pembayaran Anda.
           </p>
         </div>
 
-        {/* 2 PILIHAN UTAMA SAJA */}
+        {/* HANYA ADA 2 TOMBOL UTAMA */}
         <div className="space-y-3">
           <Link
             href="/login"
@@ -105,15 +105,15 @@ export default async function WelcomeScreen() {
 
           <Link
             href="/register"
-            className="w-full flex items-center justify-center gap-2 bg-[#F8F5EF] hover:bg-[#E8DED0] text-[#333333] border border-[#E8DED0] py-3.5 px-6 rounded-2xl font-medium text-sm transition active:scale-[0.98]"
+            className="w-full flex items-center justify-center gap-2 bg-[#FAF8F5] hover:bg-[#E8E2D8] text-[#1A1A1A] border border-[#E8E2D8] py-3.5 px-6 rounded-2xl font-medium text-sm transition active:scale-[0.98]"
           >
             <UserPlus className="w-4 h-4" />
             Registrasi Akun Baru
           </Link>
         </div>
 
-        <p className="text-[11px] text-[#333333]/40 mt-8">
-          Khusus Klien & Tim Internal Wedding Organizer
+        <p className="text-[11px] text-[#1A1A1A]/40 mt-8">
+          Khusus Klien &amp; Tim Internal Wedding Organizer
         </p>
       </div>
     </main>

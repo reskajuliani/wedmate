@@ -29,7 +29,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id" className={`scroll-smooth ${plusJakartaSans.variable} ${playfairDisplay.variable}`}>
-      <body className="min-h-screen flex flex-col bg-[#F8F5EF] text-[#333333] font-sans antialiased selection:bg-[#C8A46A]/20 selection:text-[#333333]">
+      <body className="min-h-screen flex flex-col bg-[#FAF8F5] text-[#1A1A1A] font-sans antialiased selection:bg-[#C8A46A]/20 selection:text-[#1A1A1A]">
         <AuthProvider>
           <div className="flex-1 flex flex-col">{children}</div>
         </AuthProvider>

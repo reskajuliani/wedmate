@@ -172,7 +172,7 @@ export default function AdminProjectsPage() {
                 Proyek & Checklist Klien Aktif
               </h1>
               <p className="text-xs text-charcoal-500 mt-1">
-                Pantau seluruh proyek pernikahan pengantin, milestone kesiapan, dan checklist vendor terintegrasi.
+                Pantau seluruh proyek pernikahan pengantin, milestone kesiapan, dan checklist persiapan pernikahan terintegrasi.
               </p>
             </div>
 
@@ -508,7 +508,7 @@ export default function AdminProjectsPage() {
                     required
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
-                    placeholder="Contoh: Finalisasi rundown acara & gladi resik vendor"
+                    placeholder="Contoh: Finalisasi rundown acara & gladi resik bersama tim WO"
                     className="w-full px-4 py-2.5 text-xs rounded-xl border border-softbeige focus:outline-none focus:border-champagne"
                   />
                 </div>

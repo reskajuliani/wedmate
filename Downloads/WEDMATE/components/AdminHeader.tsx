@@ -20,31 +20,25 @@ import {
 
 const ADMIN_NAV_ITEMS = [
   {
-    label: 'Persetujuan',
+    label: 'Approval & Booking',
     href: '/admin/approvals',
-    match: ['/admin/approvals', '/admin/dashboard/approvals', '/admin/bookings'],
+    match: ['/admin/approvals', '/admin/dashboard/approvals', '/admin/bookings', '/admin/calendar'],
     icon: ShieldCheck,
-  },
-  {
-    label: 'Kalender Jadwal',
-    href: '/admin/calendar',
-    match: ['/admin/calendar'],
-    icon: CalendarDays,
   },
   {
     label: 'Verifikasi Pembayaran',
     href: '/admin/payments',
-    match: ['/admin/payments'],
+    match: ['/admin/payments', '/admin/reports'],
     icon: CreditCard,
   },
   {
-    label: 'Manajemen Project',
+    label: 'Checklist Proyek',
     href: '/admin/projects',
     match: ['/admin/projects'],
     icon: ListTodo,
   },
   {
-    label: 'Katalog Paket',
+    label: 'Kelola Paket',
     href: '/admin/packages',
     match: ['/admin/packages'],
     icon: Package,
