@@ -379,10 +379,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 4. Alihkan langsung ke /login dengan replace agar riwayat bersih dan tidak memicu deteksi sesi berulang
-      window.location.replace('/login');
+      // 4. Alihkan langsung ke halaman utama Welcome Screen (/)
+      window.location.replace('/');
     } else {
-      router.push('/login');
+      router.push('/');
     }
   }, [router]);
 
@@ -489,24 +489,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       Boolean(getCookieValue('wedmate_session_user'));
 
     // Admin Routes Guard:
-    // If the server allowed the request through, the user HAS valid credentials.
-    // Client state MUST synchronize and NEVER kick the user to /login!
     if (isAdminRoute) {
-      if (!currentUser || currentUser.role !== 'ADMIN') {
-        const adminUser =
-          demoStore.getUserById(CANONICAL_ADMIN_ID) ||
-          demoStore.getUsers().find((u) => u.role === 'ADMIN');
-        if (adminUser) {
-          if (activeUserId !== adminUser.id) {
-            setActiveUserId(adminUser.id);
-            try {
-              localStorage.setItem(AUTH_STORAGE_KEY, adminUser.id);
-            } catch {
-              // ignore
-            }
-          }
-          syncAuthCookies(adminUser);
-        }
+      if (!currentUser && !hasAdminCookie) {
+        const fullUrl = typeof window !== 'undefined' ? window.location.pathname + window.location.search : pathname;
+        router.push('/login?redirect=' + encodeURIComponent(fullUrl));
       }
       return;
     }

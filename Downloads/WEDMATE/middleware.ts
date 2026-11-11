@@ -61,18 +61,6 @@ export async function middleware(request: NextRequest) {
 
   // Jika terautentikasi melalui cookie sesi WEDMATE
   if (authRole) {
-    // Rute root Welcome Screen: alihkan pengguna yang sudah memiliki sesi aktif
-    if (pathname === '/') {
-      if (authRole === 'ADMIN') {
-        return NextResponse.redirect(new URL('/admin/approvals', request.url));
-      }
-      if (authStatus === 'APPROVED') {
-        return NextResponse.redirect(new URL('/customer/booking', request.url));
-      } else {
-        return NextResponse.redirect(new URL('/approval-pending', request.url));
-      }
-    }
-
     // Proteksi Rute Admin (/admin/*)
     if (pathname.startsWith('/admin')) {
       if (authRole === 'ADMIN') {
@@ -140,17 +128,6 @@ export async function middleware(request: NextRequest) {
 
         const role = profile?.role ? profile.role.toUpperCase() : null;
         const approvalStatus = profile?.approval_status;
-
-        if (pathname === '/') {
-          if (role === 'ADMIN') {
-            return NextResponse.redirect(new URL('/admin/approvals', request.url));
-          }
-          if (approvalStatus === 'APPROVED') {
-            return NextResponse.redirect(new URL('/customer/booking', request.url));
-          } else {
-            return NextResponse.redirect(new URL('/approval-pending', request.url));
-          }
-        }
 
         if (pathname.startsWith('/admin')) {
           if (role !== 'ADMIN') {

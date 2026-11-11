@@ -16,6 +16,7 @@ import {
   X,
   UserCheck,
   CalendarDays,
+  Home,
 } from 'lucide-react';
 
 const ADMIN_NAV_ITEMS = [
@@ -142,10 +143,19 @@ export function AdminHeader() {
               </span>
             </div>
 
+            <Link
+              href="/"
+              title="Lihat Halaman Depan / Welcome Screen"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-white/70 hover:bg-white/10 hover:text-white border border-white/10 transition"
+            >
+              <Home className="w-3.5 h-3.5 text-[#C8A46A]" />
+              <span>Portal Utama</span>
+            </Link>
+
             <button
               onClick={logout}
               title="Keluar dari sesi Admin"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-transparent hover:border-red-500/20 transition"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-transparent hover:border-red-500/20 transition cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span>Keluar</span>
@@ -179,16 +189,26 @@ export function AdminHeader() {
                 <p className="text-[10px] text-[#C8A46A] font-mono">SUPER ADMINISTRATOR</p>
               </div>
             </div>
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                logout();
-              }}
-              className="p-2 text-red-400 hover:bg-red-500/20 rounded-xl transition"
-              title="Keluar"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <Link
+                href="/"
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 text-[#C8A46A] hover:bg-white/10 rounded-xl transition"
+                title="Ke Portal Utama"
+              >
+                <Home className="w-4 h-4" />
+              </Link>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  logout();
+                }}
+                className="p-2 text-red-400 hover:bg-red-500/20 rounded-xl transition cursor-pointer"
+                title="Keluar"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Core Menus */}

@@ -1,73 +1,47 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { LogIn, UserPlus } from 'lucide-react';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { LogIn, UserPlus, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
 export default async function WelcomeScreen() {
   const cookieStore = await cookies();
 
-  // 1. Periksa sesi cookie WEDMATE terlebih dahulu
+  // Deteksi sesi aktif tanpa melakukan auto-redirect paksa agar pengguna selalu dapat melihat Welcome Screen
+  let activeUser: { name: string; role: string; dashboardUrl: string } | null = null;
   const sessionCookie = cookieStore.get('wedmate_session_user')?.value;
   if (sessionCookie) {
     try {
       const parsed = JSON.parse(decodeURIComponent(sessionCookie));
-      if (parsed.role === 'ADMIN' || parsed.id === 'a0000000-0000-0000-0000-000000000001' || parsed.email === 'admin@wedmate.id') {
-        redirect('/admin/approvals');
-      } else if (parsed.status === 'APPROVED' || parsed.approval_status === 'APPROVED') {
-        redirect('/customer/booking');
-      } else {
-        redirect('/approval-pending');
+      if (parsed) {
+        const isAdm =
+          parsed.role === 'ADMIN' ||
+          parsed.id === 'a0000000-0000-0000-0000-000000000001' ||
+          parsed.email === 'admin@wedmate.id';
+        activeUser = {
+          name: parsed.full_name || (isAdm ? 'Admin WEDMATE' : 'Calon Pengantin'),
+          role: isAdm ? 'ADMIN' : 'CUSTOMER',
+          dashboardUrl: isAdm
+            ? '/admin/approvals'
+            : parsed.status === 'APPROVED' || parsed.approval_status === 'APPROVED'
+            ? '/customer/booking'
+            : '/approval-pending',
+        };
       }
     } catch {
       // ignore
     }
   }
 
-  const roleCookie =
-    cookieStore.get('wedmate_user_role')?.value ||
-    cookieStore.get('wedmate_role')?.value;
-  const statusCookie =
-    cookieStore.get('wedmate_user_status')?.value ||
-    cookieStore.get('wedmate_user_approval_status')?.value ||
-    cookieStore.get('wedmate_status')?.value;
-  const userIdCookie = cookieStore.get('wedmate_user_id')?.value;
-
-  if (roleCookie === 'ADMIN' || userIdCookie === 'a0000000-0000-0000-0000-000000000001') {
-    redirect('/admin/approvals');
-  } else if (roleCookie === 'CUSTOMER') {
-    if (statusCookie === 'APPROVED') {
-      redirect('/customer/booking');
-    } else {
-      redirect('/approval-pending');
-    }
-  }
-
-  // 2. Periksa Supabase Auth jika belum terdeteksi dari cookie
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role, approval_status')
-          .eq('id', user.id)
-          .single();
-
-        if (profile?.role === 'ADMIN') {
-          redirect('/admin/approvals');
-        } else if (profile?.approval_status === 'APPROVED') {
-          redirect('/customer/booking');
-        } else {
-          redirect('/approval-pending');
-        }
-      }
-    } catch {
-      // ignore
+  if (!activeUser) {
+    const rawRole = cookieStore.get('wedmate_user_role')?.value || cookieStore.get('wedmate_role')?.value;
+    const userId = cookieStore.get('wedmate_user_id')?.value;
+    if (rawRole === 'ADMIN' || userId === 'a0000000-0000-0000-0000-000000000001') {
+      activeUser = {
+        name: 'Admin WEDMATE',
+        role: 'ADMIN',
+        dashboardUrl: '/admin/approvals',
+      };
     }
   }
 
@@ -92,6 +66,28 @@ export default async function WelcomeScreen() {
             Akses sistem manajemen perencanaan pernikahan, reservasi paket, dan pelacakan pembayaran Anda.
           </p>
         </div>
+
+        {/* Informasi Sesi Aktif Jika Ada */}
+        {activeUser && (
+          <div className="mb-5 p-3.5 bg-[#FAF8F5] border border-[#C8A46A]/30 rounded-2xl text-left flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-[#C8A46A]/10 text-[#C8A46A] flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[11px] text-[#1A1A1A]/50 leading-none">Terhubung sebagai</p>
+                <p className="text-xs font-semibold text-[#1A1A1A] mt-0.5">{activeUser.name}</p>
+              </div>
+            </div>
+            <Link
+              href={activeUser.dashboardUrl}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#C8A46A] text-white text-[11px] font-semibold hover:bg-[#b59157] transition shadow-xs"
+            >
+              <span>Buka Panel</span>
+              <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+        )}
 
         {/* HANYA ADA 2 TOMBOL UTAMA */}
         <div className="space-y-3">
