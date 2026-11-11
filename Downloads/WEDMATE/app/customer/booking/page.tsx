@@ -37,8 +37,12 @@ function CustomerBookingContent() {
   const packageParam = searchParams.get('packageId') || searchParams.get('package');
 
   const customerId = user?.id || '';
-  const [packages, setPackages] = useState<WeddingPackage[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [packages, setPackages] = useState<WeddingPackage[]>(() => {
+    return demoStore.getPackages(true);
+  });
+  const [bookings, setBookings] = useState<Booking[]>(() => {
+    return customerId ? demoStore.getBookings(customerId) : [];
+  });
   const [previewPackageModal, setPreviewPackageModal] = useState<WeddingPackage | null>(null);
 
   // Booking Form State

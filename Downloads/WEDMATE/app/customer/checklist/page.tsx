@@ -81,10 +81,27 @@ export default function CustomerChecklistPage() {
   const { user } = useAuth();
   const customerId = user?.id || '';
 
-  const [project, setProject] = useState<WeddingProject | null>(null);
-  const [tasks, setTasks] = useState<WeddingTask[]>([]);
-  const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(null);
-  const [pendingBooking, setPendingBooking] = useState<Booking | null>(null);
+  const [project, setProject] = useState<WeddingProject | null>(() => {
+    if (!customerId) return null;
+    const userProjects = demoStore.getProjects(customerId);
+    return userProjects.length > 0 ? userProjects[0] : null;
+  });
+  const [tasks, setTasks] = useState<WeddingTask[]>(() => {
+    if (!customerId) return [];
+    const userProjects = demoStore.getProjects(customerId);
+    if (userProjects.length > 0) {
+      return userProjects[0].tasks || demoStore.getTasksByProjectId(userProjects[0].id);
+    }
+    return [];
+  });
+  const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(() => {
+    if (!customerId) return null;
+    return demoStore.getBookings(customerId).find((b) => b.status === 'CONFIRMED') || null;
+  });
+  const [pendingBooking, setPendingBooking] = useState<Booking | null>(() => {
+    if (!customerId) return null;
+    return demoStore.getBookings(customerId).find((b) => b.status === 'PENDING') || null;
+  });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');

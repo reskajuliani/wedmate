@@ -33,8 +33,12 @@ export default function CustomerPaymentPage() {
   const { user } = useAuth();
   const customerId = user?.id || '';
 
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
+  const [payments, setPayments] = useState<Payment[]>(() => {
+    return customerId ? demoStore.getPayments(customerId) : [];
+  });
+  const [transactions, setTransactions] = useState<PaymentTransaction[]>(() => {
+    return customerId ? demoStore.getTransactions(customerId) : [];
+  });
 
   // Clipboard copy state
   const [copiedAccount, setCopiedAccount] = useState<string | null>(null);
