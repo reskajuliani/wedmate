@@ -111,7 +111,10 @@ function CustomerBookingContent() {
     e.preventDefault();
     setFormError(null);
 
-    if (!selectedPackageId) {
+    const targetPackage = packages.find((p) => p.id === selectedPackageId || p.slug === selectedPackageId) || packages[0];
+    const packageIdToUse = selectedPackageId || targetPackage?.id;
+
+    if (!packageIdToUse) {
       setFormError('Silakan pilih salah satu paket pernikahan.');
       return;
     }
@@ -132,11 +135,32 @@ function CustomerBookingContent() {
       return;
     }
 
+    let effectiveCustomerId = customerId;
+    if (!effectiveCustomerId && typeof window !== 'undefined') {
+      try {
+        const session = localStorage.getItem('wedmate_session_user');
+        if (session) {
+          const parsed = JSON.parse(session);
+          effectiveCustomerId = parsed?.id || '';
+        }
+        if (!effectiveCustomerId) {
+          effectiveCustomerId = localStorage.getItem('wedmate_user_id') || '';
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!effectiveCustomerId) {
+      setFormError('Sesi login tidak terdeteksi. Silakan login kembali.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const newBooking = await supabaseService.createBooking({
-        customer_id: customerId,
-        package_id: selectedPackageId,
+        customer_id: effectiveCustomerId,
+        package_id: packageIdToUse,
         wedding_date: weddingDate,
         venue_name: venueName.trim(),
         venue_address: venueAddress.trim(),
@@ -149,7 +173,7 @@ function CustomerBookingContent() {
       setVenueAddress('');
       setSpecialNotes('');
       showToast(
-        `Pengajuan booking untuk paket "${newBooking.package?.name || 'Pilihan'}" berhasil dikirim! Tim Admin akan segera mereview reservasi Anda.`
+        `Pengajuan booking untuk paket "${newBooking.package?.name || targetPackage?.name || 'Pilihan'}" berhasil dikirim! Tim Admin akan segera mereview reservasi Anda.`
       );
     } catch (err: any) {
       setFormError(err.message || 'Gagal mengirim pengajuan booking.');

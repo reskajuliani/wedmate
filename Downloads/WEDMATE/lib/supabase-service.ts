@@ -39,8 +39,8 @@ export const supabaseService = {
           query = query.eq('is_active', true);
         }
         const { data, error } = await query;
-        if (!error && data) {
-          return data.map((d: any) => ({
+        if (!error && data && data.length > 0) {
+          const mapped = data.map((d: any) => ({
             id: d.id,
             name: d.name,
             slug: d.slug,
@@ -53,6 +53,8 @@ export const supabaseService = {
             created_at: d.created_at,
             updated_at: d.updated_at,
           }));
+          demoStore.setPackages(mapped);
+          return mapped;
         }
       } catch (err) {
         console.warn('Supabase getPackages fallback to local store:', err);
@@ -149,6 +151,22 @@ export const supabaseService = {
   // BOOKINGS (bookings)
   // -------------------------------------------------------------
   async getBookings(customerId?: string): Promise<Booking[]> {
+    // 1. Fetch from server API first (bypasses RLS)
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/bookings' + (customerId ? `?customerId=${customerId}` : ''));
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.bookings) && json.bookings.length > 0) {
+            return json.bookings;
+          }
+        }
+      } catch (err) {
+        console.warn('Fetch /api/bookings error:', err);
+      }
+    }
+
+    // 2. Direct query fallback
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -205,6 +223,40 @@ export const supabaseService = {
     // Always sync with demoStore first to guarantee instant UI feedback
     const localBooking = demoStore.createBooking(data);
 
+    // Sync to Server API Registry (uses Admin Client to bypass RLS in Supabase)
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: localBooking.id,
+            customer_id: data.customer_id,
+            package_id: localBooking.package_id,
+            wedding_date: data.wedding_date,
+            venue_name: data.venue_name,
+            venue_address: data.venue_address,
+            guest_count: data.guest_count,
+            notes: data.notes,
+            total_price: localBooking.total_price,
+          }),
+          keepalive: true,
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.booking) {
+            return {
+              ...json.booking,
+              package: json.booking.package || localBooking.package,
+              customer: json.booking.customer || localBooking.customer,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Sync /api/bookings error:', err);
+      }
+    }
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -213,7 +265,7 @@ export const supabaseService = {
           .insert({
             id: localBooking.id,
             customer_id: data.customer_id,
-            package_id: data.package_id,
+            package_id: localBooking.package_id,
             wedding_date: data.wedding_date,
             venue_name: data.venue_name,
             venue_address: data.venue_address,
@@ -249,6 +301,20 @@ export const supabaseService = {
   async updateBookingStatus(id: string, status: BookingStatus, notes?: string): Promise<Booking> {
     const updated = demoStore.updateBookingStatus(id, status, notes);
 
+    // Sync to Server API Registry (uses Admin Client to bypass RLS in Supabase)
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/bookings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, status, notes }),
+          keepalive: true,
+        });
+      } catch (err) {
+        console.warn('Sync /api/bookings PATCH error:', err);
+      }
+    }
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -256,7 +322,7 @@ export const supabaseService = {
           .from('bookings')
           .update({
             status,
-            notes: notes !== undefined ? notes : updated.notes,
+            notes: notes || undefined,
             updated_at: new Date().toISOString(),
           })
           .eq('id', id);
@@ -272,6 +338,21 @@ export const supabaseService = {
   // PAYMENTS & TRANSACTIONS (payments, payment_transactions)
   // -------------------------------------------------------------
   async getPayments(customerId?: string): Promise<Payment[]> {
+    // 1. Fetch from server API first (bypasses RLS)
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/payments?type=payments' + (customerId ? `&customerId=${customerId}` : ''));
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.payments) && json.payments.length > 0) {
+            return json.payments;
+          }
+        }
+      } catch (err) {
+        console.warn('Fetch /api/payments error:', err);
+      }
+    }
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -303,6 +384,21 @@ export const supabaseService = {
   },
 
   async getTransactions(customerId?: string): Promise<PaymentTransaction[]> {
+    // 1. Fetch from server API first (bypasses RLS)
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/payments?type=transactions' + (customerId ? `&customerId=${customerId}` : ''));
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.transactions) && json.transactions.length > 0) {
+            return json.transactions;
+          }
+        }
+      } catch (err) {
+        console.warn('Fetch /api/payments transactions error:', err);
+      }
+    }
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -354,6 +450,27 @@ export const supabaseService = {
   }): Promise<PaymentTransaction> {
     const localTx = demoStore.createTransaction(data);
 
+    // Sync to Server API Registry (uses Admin Client)
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payment_id: data.payment_id,
+            customer_id: data.customer_id,
+            payment_method: data.payment_method,
+            amount: data.amount,
+            proof_url: data.proof_url,
+            notes: data.notes,
+          }),
+          keepalive: true,
+        });
+      } catch (err) {
+        console.warn('Sync /api/payments error:', err);
+      }
+    }
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -384,6 +501,25 @@ export const supabaseService = {
   ): Promise<PaymentTransaction> {
     const verified = demoStore.verifyTransaction(txId, status, adminId, rejectionReason);
 
+    // Sync to Server API Registry (uses Admin Client)
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/payments', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transactionId: txId,
+            status,
+            adminId,
+            rejectionReason,
+          }),
+          keepalive: true,
+        });
+      } catch (err) {
+        console.warn('Sync /api/payments PATCH error:', err);
+      }
+    }
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -397,22 +533,6 @@ export const supabaseService = {
             updated_at: new Date().toISOString(),
           })
           .eq('id', txId);
-
-        // Update payment balance in Supabase if approved
-        if (status === 'APPROVED' && verified.payment_id) {
-          const payment = demoStore.getPayments().find((p) => p.id === verified.payment_id);
-          if (payment) {
-            await supabase
-              .from('payments')
-              .update({
-                amount_paid: payment.amount_paid,
-                remaining_balance: payment.remaining_balance,
-                status: payment.status,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', verified.payment_id);
-          }
-        }
       } catch (err) {
         console.warn('Supabase verifyTransaction sync error:', err);
       }

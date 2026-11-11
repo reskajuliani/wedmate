@@ -195,13 +195,6 @@ export default function CustomerChecklistPage() {
               Pantau jadwal hitung mundur hari pernikahan dan progres checklist tugas yang disiapkan oleh tim Wedding Organizer kami.
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#FAF8F5] text-[#1A1A1A] border border-[#E8E2D8]">
-              <Lock className="w-3.5 h-3.5 text-[#C8A46A]" />
-              <span>Pantauan Klien (Read-Only)</span>
-            </span>
-          </div>
         </div>
 
         {/* CASE 1: NO PROJECT YET */}

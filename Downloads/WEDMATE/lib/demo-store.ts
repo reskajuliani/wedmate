@@ -355,29 +355,60 @@ class DemoStore {
     return [...this.state.packages];
   }
 
+  public setPackages(packages: WeddingPackage[]): void {
+    if (!Array.isArray(packages) || packages.length === 0) return;
+    const map = new Map<string, WeddingPackage>();
+    this.state.packages.forEach((p) => map.set(p.id, p));
+    packages.forEach((p) => map.set(p.id, p));
+    this.state.packages = Array.from(map.values());
+    this.saveState();
+  }
+
   public getPackageById(id: string): WeddingPackage | undefined {
-    return this.state.packages.find((p) => p.id === id);
+    if (!id) return undefined;
+    return (
+      this.state.packages.find((p) => p.id === id || p.slug === id) ||
+      this.state.packages.find((p) => p.id.toLowerCase() === id.toLowerCase() || p.slug.toLowerCase() === id.toLowerCase())
+    );
   }
 
   public getPackageBySlug(slug: string): WeddingPackage | undefined {
-    return this.state.packages.find((p) => p.slug === slug);
+    if (!slug) return undefined;
+    return this.state.packages.find((p) => p.slug === slug || p.id === slug);
   }
 
-  public createPackage(pkg: Omit<WeddingPackage, 'id' | 'created_at' | 'updated_at'>): WeddingPackage {
+  public createPackage(pkg: Omit<WeddingPackage, 'id' | 'created_at' | 'updated_at'> & { id?: string }): WeddingPackage {
     const newPkg: WeddingPackage = {
       ...pkg,
-      id: `p${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: pkg.id || `p${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    this.state.packages.push(newPkg);
+    const existingIndex = this.state.packages.findIndex((p) => p.id === newPkg.id || p.slug === newPkg.slug);
+    if (existingIndex >= 0) {
+      this.state.packages[existingIndex] = newPkg;
+    } else {
+      this.state.packages.push(newPkg);
+    }
     this.saveState();
     return newPkg;
   }
 
   public updatePackage(id: string, updates: Partial<WeddingPackage>): WeddingPackage {
-    const index = this.state.packages.findIndex((p) => p.id === id);
-    if (index === -1) throw new Error('Package not found');
+    const index = this.state.packages.findIndex((p) => p.id === id || p.slug === id);
+    if (index === -1) {
+      const created = this.createPackage({
+        id,
+        name: updates.name || 'Paket Pernikahan',
+        slug: updates.slug || 'paket',
+        price: updates.price || 25000000,
+        estimated_guests: updates.estimated_guests || 100,
+        description: updates.description || '',
+        features: updates.features || [],
+        is_active: updates.is_active !== undefined ? updates.is_active : true,
+      });
+      return created;
+    }
     const updated = {
       ...this.state.packages[index],
       ...updates,
@@ -425,13 +456,30 @@ class DemoStore {
     guest_count: number;
     notes?: string;
   }): Booking {
-    const pkg = this.getPackageById(data.package_id);
-    if (!pkg) throw new Error('Package not found');
+    let pkg = this.getPackageById(data.package_id) || this.getPackageBySlug(data.package_id);
+    if (!pkg && this.state.packages.length > 0) {
+      pkg = this.state.packages[0];
+    }
+    if (!pkg) {
+      pkg = {
+        id: data.package_id || generateUUID(),
+        name: 'Paket Pernikahan Pilihan',
+        slug: 'paket-pilihan',
+        price: 25000000,
+        estimated_guests: data.guest_count || 100,
+        description: 'Paket koordinasi pernikahan komprehensif WEDMATE',
+        features: ['Wedding Organizer Coordination', 'Rundown & Timeline Hari H'],
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      this.state.packages.push(pkg);
+    }
 
     const newBooking: Booking = {
       id: generateUUID(),
       customer_id: data.customer_id,
-      package_id: data.package_id,
+      package_id: pkg.id,
       wedding_date: data.wedding_date,
       venue_name: data.venue_name,
       venue_address: data.venue_address,
@@ -441,6 +489,8 @@ class DemoStore {
       total_price: pkg.price,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      package: pkg,
+      customer: this.getUserById(data.customer_id),
     };
 
     this.state.bookings.push(newBooking);
