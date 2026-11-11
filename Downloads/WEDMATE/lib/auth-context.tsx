@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { UserProfile, UserRole, AccountStatus } from './types';
 import { demoStore } from './demo-store';
 import { supabaseService } from './supabase-service';
+import { createClient, isSupabaseConfigured } from './supabase/client';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -14,7 +15,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password?: string) => Promise<UserProfile>;
   register: (data: { full_name: string; email: string; phone: string; wedding_date?: string }) => Promise<UserProfile>;
-  logout: () => void;
+  logout: () => Promise<void>;
   switchRole: (roleType: 'guest' | 'pending' | 'approved' | 'admin') => void;
   refreshUser: () => void;
 }
@@ -49,6 +50,7 @@ function syncAuthCookies(user: UserProfile | null) {
   const secureFlag = isHttps ? '; Secure' : '';
 
   if (!user) {
+    const expiredDate = 'Thu, 01 Jan 1970 00:00:00 GMT';
     const cookieNames = [
       'wedmate_user_id',
       'wedmate_user_role',
@@ -59,7 +61,8 @@ function syncAuthCookies(user: UserProfile | null) {
       'wedmate_session_user',
     ];
     cookieNames.forEach((name) => {
-      document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax${secureFlag}`;
+      document.cookie = `${name}=; path=/; expires=${expiredDate}; max-age=0; SameSite=Lax${secureFlag}`;
+      document.cookie = `${name}=; expires=${expiredDate}; max-age=0; SameSite=Lax${secureFlag}`;
     });
 
     try {
@@ -306,16 +309,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    setIsLoading(true);
     setActiveUserId(null);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
+
+    // 1. Panggil supabase.auth.signOut() jika Supabase sedang aktif
+    try {
+      if (isSupabaseConfigured()) {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+      }
+    } catch (err) {
+      console.warn('Gagal memproses supabase.auth.signOut():', err);
     }
-    syncAuthCookies(null);
+
+    // 2. Tunggu hingga request POST /api/auth/sync ({ user: null }) benar-benar selesai mengembalikan respon HTTP 200 OK
+    try {
+      await fetch('/api/auth/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: null }),
+      });
+    } catch (err) {
+      console.warn('Gagal memproses sync cookie logout ke server:', err);
+    }
+
+    // 3. Pembersihan kuat di sisi browser
     if (typeof window !== 'undefined') {
-      window.location.assign('/');
+      try {
+        localStorage.clear();
+      } catch (e) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+
+      try {
+        sessionStorage.clear();
+      } catch (e) {
+        // ignore
+      }
+
+      const isHttps = window.location.protocol === 'https:';
+      const secureFlag = isHttps ? '; Secure' : '';
+      const expiredDate = 'Thu, 01 Jan 1970 00:00:00 GMT';
+
+      // Hapus seluruh cookie aplikasi wedmate
+      const targetCookies = [
+        'wedmate_user_id',
+        'wedmate_user_role',
+        'wedmate_role',
+        'wedmate_user_status',
+        'wedmate_status',
+        'wedmate_user_approval_status',
+        'wedmate_session_user',
+      ];
+      targetCookies.forEach((name) => {
+        document.cookie = `${name}=; path=/; expires=${expiredDate}; max-age=0; SameSite=Lax${secureFlag}`;
+        document.cookie = `${name}=; expires=${expiredDate}; max-age=0; SameSite=Lax${secureFlag}`;
+      });
+
+      // Sapu bersih seluruh cookie pada document.cookie
+      const allCookies = document.cookie.split(';');
+      for (let i = 0; i < allCookies.length; i++) {
+        const c = allCookies[i];
+        const eqPos = c.indexOf('=');
+        const name = eqPos > -1 ? c.substring(0, eqPos).trim() : c.trim();
+        if (name) {
+          document.cookie = `${name}=; path=/; expires=${expiredDate}; max-age=0; SameSite=Lax${secureFlag}`;
+          document.cookie = `${name}=; expires=${expiredDate}; max-age=0; SameSite=Lax${secureFlag}`;
+        }
+      }
+
+      // 4. Alihkan langsung ke /login dengan replace agar riwayat bersih dan tidak memicu deteksi sesi berulang
+      window.location.replace('/login');
     } else {
-      router.push('/');
+      router.push('/login');
     }
   }, [router]);
 

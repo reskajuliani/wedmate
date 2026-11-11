@@ -29,7 +29,11 @@ export async function POST(request: NextRequest) {
         'wedmate_session_user',
       ];
       cookieNames.forEach((name) => {
-        response.cookies.set(name, '', { ...cookieOptions, maxAge: 0 });
+        response.cookies.set(name, '', {
+          ...cookieOptions,
+          maxAge: 0,
+          expires: new Date(0),
+        });
       });
       return response;
     }
