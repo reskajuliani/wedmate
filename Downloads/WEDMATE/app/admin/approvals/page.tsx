@@ -58,14 +58,20 @@ function AdminApprovalsContent() {
   }, [tabParam]);
 
   // --- ACCOUNTS STATE ---
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  // Pre-seed synchronously from local store for 0ms instant loading
+  const [users, setUsers] = useState<UserProfile[]>(() => {
+    return demoStore.getUsers().filter((u) => u.role === 'CUSTOMER');
+  });
   const [accountStatusFilter, setAccountStatusFilter] = useState<'ALL' | AccountStatus>('ALL');
   const [accountSearch, setAccountSearch] = useState('');
   const [rejectModalUser, setRejectModalUser] = useState<UserProfile | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
   // --- BOOKINGS STATE ---
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  // Pre-seed synchronously from local store for 0ms instant loading
+  const [bookings, setBookings] = useState<Booking[]>(() => {
+    return demoStore.getBookings();
+  });
   const [bookingStatusFilter, setBookingStatusFilter] = useState<'ALL' | BookingStatus>('ALL');
   const [bookingSearch, setBookingSearch] = useState('');
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);

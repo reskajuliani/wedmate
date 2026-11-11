@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useRouter, usePathname } from 'next/navigation';
 import { UserProfile, UserRole, AccountStatus } from './types';
 import { demoStore } from './demo-store';
+import { supabaseService } from './supabase-service';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -284,14 +285,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Email sudah terdaftar. Silakan gunakan email lain atau login.');
         }
 
-        const newUser = demoStore.createUser({
+        const newUser = await supabaseService.createProfile({
           email: data.email.trim().toLowerCase(),
           full_name: data.full_name.trim(),
           phone: data.phone.trim(),
           wedding_date: data.wedding_date || undefined,
-          role: 'CUSTOMER',
-          status: 'PENDING',
-          approval_status: 'PENDING',
           notes: 'Registrasi mandiri dari formulir web.',
         });
 

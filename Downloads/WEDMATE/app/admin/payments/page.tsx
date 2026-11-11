@@ -34,8 +34,12 @@ export default function AdminPaymentVerificationPage() {
   const { user } = useAuth();
   const adminId = user?.id || 'a0000000-0000-0000-0000-000000000001';
 
-  const [allTransactions, setAllTransactions] = useState<PaymentTransaction[]>([]);
-  const [allPayments, setAllPayments] = useState<Payment[]>([]);
+  const [allTransactions, setAllTransactions] = useState<PaymentTransaction[]>(() => {
+    return demoStore.getTransactions();
+  });
+  const [allPayments, setAllPayments] = useState<Payment[]>(() => {
+    return demoStore.getPayments();
+  });
 
   // Filters state
   const [statusFilter, setStatusFilter] = useState<'ALL' | TransactionStatus>('ALL');

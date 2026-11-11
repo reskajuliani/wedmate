@@ -424,6 +424,61 @@ export const supabaseService = {
   // -------------------------------------------------------------
   // PROFILES (profiles)
   // -------------------------------------------------------------
+  async createProfile(data: {
+    email: string;
+    full_name: string;
+    phone: string;
+    wedding_date?: string;
+    notes?: string;
+  }): Promise<UserProfile> {
+    const id = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `u${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+    const profileData: UserProfile = {
+      id,
+      email: data.email.trim().toLowerCase(),
+      full_name: data.full_name.trim(),
+      phone: data.phone.trim(),
+      wedding_date: data.wedding_date || undefined,
+      role: 'CUSTOMER',
+      status: 'PENDING',
+      approval_status: 'PENDING',
+      notes: data.notes || 'Registrasi mandiri dari formulir web.',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Immediate local cache update for 0ms reactivity
+    demoStore.createUser(profileData);
+
+    // Direct insertion into Supabase profiles database table
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        const { error } = await supabase.from('profiles').insert({
+          id: profileData.id,
+          email: profileData.email,
+          full_name: profileData.full_name,
+          phone: profileData.phone,
+          role: profileData.role,
+          status: profileData.status,
+          approval_status: profileData.approval_status,
+          notes: profileData.notes,
+          created_at: profileData.created_at,
+          updated_at: profileData.updated_at,
+        });
+        if (error) {
+          console.warn('Supabase createProfile insert error:', error.message);
+        }
+      } catch (err) {
+        console.warn('Supabase createProfile exception:', err);
+      }
+    }
+
+    return profileData;
+  },
+
   async getProfiles(role?: string): Promise<UserProfile[]> {
     if (isSupabaseConfigured()) {
       try {

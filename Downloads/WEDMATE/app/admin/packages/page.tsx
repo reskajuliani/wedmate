@@ -36,7 +36,9 @@ const SAMPLE_IMAGE_PRESETS = [
 ];
 
 export default function AdminPackagesPage() {
-  const [packages, setPackages] = useState<WeddingPackage[]>([]);
+  const [packages, setPackages] = useState<WeddingPackage[]>(() => {
+    return demoStore.getPackages();
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');

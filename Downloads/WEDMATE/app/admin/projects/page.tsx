@@ -54,7 +54,9 @@ const CATEGORY_COLORS: Record<WeddingTask['category'], string> = {
 
 export default function AdminProjectsPage() {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<WeddingProject[]>([]);
+  const [projects, setProjects] = useState<WeddingProject[]>(() => {
+    return demoStore.getProjects();
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
 
