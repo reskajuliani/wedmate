@@ -95,9 +95,12 @@ function syncAuthCookies(user: UserProfile | null) {
     id: user.id,
     email: user.email,
     full_name: user.full_name,
+    phone: user.phone || '',
+    wedding_date: user.wedding_date || '',
     role: role,
     status: userStatus,
     approval_status: userStatus,
+    notes: user.notes || '',
   });
   document.cookie = `wedmate_session_user=${encodeURIComponent(sessionPayload)}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
 
@@ -130,10 +133,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const parsed = JSON.parse(sessionCookie);
           if (parsed?.id) return parsed.id;
         }
-        const role = getCookieValue('wedmate_user_role') || getCookieValue('wedmate_role');
-        if (role && role.toUpperCase() === 'ADMIN') {
-          return CANONICAL_ADMIN_ID;
-        }
       } catch {
         return null;
       }
@@ -160,12 +159,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (sessionCookie) {
             const parsed = JSON.parse(sessionCookie);
             if (parsed?.id) savedId = parsed.id;
-          }
-        }
-        if (!savedId) {
-          const role = getCookieValue('wedmate_user_role') || getCookieValue('wedmate_role');
-          if (role && role.toUpperCase() === 'ADMIN') {
-            savedId = CANONICAL_ADMIN_ID;
           }
         }
       }
@@ -203,16 +196,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const parsed = JSON.parse(sessionCookie);
           if (parsed && parsed.id) {
             const existing = demoStore.getUserById(parsed.id);
-            if (existing) return existing;
+            if (existing) {
+              return {
+                ...existing,
+                phone: existing.phone || parsed.phone || '',
+                wedding_date: existing.wedding_date || parsed.wedding_date || '',
+                notes: existing.notes || parsed.notes || '',
+              };
+            }
             return parsed as UserProfile;
           }
         }
-        const cookieRole = getCookieValue('wedmate_user_role') || getCookieValue('wedmate_role');
         const cookieId = getCookieValue('wedmate_user_id');
-        if (
-          (cookieRole && cookieRole.toUpperCase() === 'ADMIN') ||
-          cookieId === CANONICAL_ADMIN_ID
-        ) {
+        if (cookieId === CANONICAL_ADMIN_ID) {
           return demoStore.getUserById(CANONICAL_ADMIN_ID) || demoStore.getUsers().find((u) => u.role === 'ADMIN') || null;
         }
       } catch {
@@ -379,10 +375,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 4. Alihkan langsung ke halaman utama Welcome Screen (/)
-      window.location.replace('/');
+      // 4. Alihkan langsung melalui server route logout agar header Set-Cookie Max-Age=0 terkirim
+      window.location.href = '/api/auth/logout';
     } else {
-      router.push('/');
+      router.push('/api/auth/logout');
     }
   }, [router]);
 
@@ -510,7 +506,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Approval Pending Page Guard
     if (pathname === '/approval-pending') {
-      if (currentUser?.role === 'ADMIN' || hasAdminCookie) {
+      if (currentUser?.role === 'ADMIN' && currentUser?.id === CANONICAL_ADMIN_ID) {
         router.push('/admin/approvals');
       } else if (currentUser?.role === 'CUSTOMER' && (currentUser.status === 'APPROVED' || currentUser.approval_status === 'APPROVED')) {
         router.push('/customer/booking');
@@ -518,16 +514,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Welcome Screen Root Page Auto-Redirect
-    if (pathname === '/') {
-      if (currentUser?.role === 'ADMIN' || hasAdminCookie) {
-        router.push('/admin/approvals');
-      } else if (currentUser?.status === 'APPROVED' || currentUser?.approval_status === 'APPROVED') {
-        router.push('/customer/booking');
-      } else if (currentUser) {
-        router.push('/approval-pending');
-      }
-    }
+    // Halaman Utama / Welcome Screen (/) dibiarkan terbuka tanpa auto-redirect paksa
+    // agar pengguna selalu dapat melihat Welcome Screen dan memilih Masuk / Registrasi.
   }, [hasMounted, pathname, currentUser, activeUserId, isLoading, router]);
 
   const value: AuthContextType = {

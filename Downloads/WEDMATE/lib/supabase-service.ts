@@ -431,9 +431,10 @@ export const supabaseService = {
     wedding_date?: string;
     notes?: string;
   }): Promise<UserProfile> {
+    // Generate valid UUIDv4 for PostgreSQL compatibility
     const id = typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
-      : `u${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
 
     const profileData: UserProfile = {
       id,
@@ -452,22 +453,35 @@ export const supabaseService = {
     // Immediate local cache update for 0ms reactivity
     demoStore.createUser(profileData);
 
+    // Sync to Server API Registry for cross-device visibility
+    try {
+      if (typeof window !== 'undefined') {
+        fetch('/api/profiles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(profileData),
+        }).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+
     // Direct insertion into Supabase profiles database table
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
-        const { error } = await supabase.from('profiles').insert({
+        // NOTE: approval_status is a GENERATED ALWAYS column in PostgreSQL, so DO NOT include it in insert!
+        const insertPayload: any = {
           id: profileData.id,
           email: profileData.email,
           full_name: profileData.full_name,
           phone: profileData.phone,
           role: profileData.role,
           status: profileData.status,
-          approval_status: profileData.approval_status,
           notes: profileData.notes,
-          created_at: profileData.created_at,
-          updated_at: profileData.updated_at,
-        });
+          wedding_date: profileData.wedding_date || null,
+        };
+        const { error } = await supabase.from('profiles').insert(insertPayload);
         if (error) {
           console.warn('Supabase createProfile insert error:', error.message);
         }
@@ -480,6 +494,7 @@ export const supabaseService = {
   },
 
   async getProfiles(role?: string): Promise<UserProfile[]> {
+    let profilesFromSupabase: UserProfile[] = [];
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -488,15 +503,16 @@ export const supabaseService = {
           query = query.eq('role', role);
         }
         const { data, error } = await query;
-        if (!error && data) {
-          return data.map((p: any) => ({
+        if (!error && data && data.length > 0) {
+          profilesFromSupabase = data.map((p: any) => ({
             id: p.id,
             email: p.email,
             full_name: p.full_name,
             phone: p.phone,
             role: p.role,
-            status: p.status || p.approval_status,
-            approval_status: p.approval_status || p.status,
+            status: p.status || p.approval_status || 'PENDING',
+            approval_status: p.approval_status || p.status || 'PENDING',
+            wedding_date: p.wedding_date,
             notes: p.notes,
             created_at: p.created_at,
             updated_at: p.updated_at,
@@ -506,12 +522,60 @@ export const supabaseService = {
         console.warn('Supabase getProfiles fallback:', err);
       }
     }
-    const localUsers = demoStore.getUsers();
-    return role ? localUsers.filter((u) => u.role === role) : localUsers;
+
+    // Also fetch from server API registry if in browser
+    let profilesFromApi: UserProfile[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/profiles' + (role ? `?role=${role}` : ''));
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.profiles)) {
+            profilesFromApi = json.profiles;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Merge Supabase, Server API, and local demoStore profiles
+    const localUsers = demoStore.getUsers().filter((u) => !role || u.role === role);
+    const map = new Map<string, UserProfile>();
+    profilesFromSupabase.forEach((p) => {
+      if (p.email) map.set(p.email.toLowerCase(), p);
+    });
+    profilesFromApi.forEach((p) => {
+      if (p.email && !map.has(p.email.toLowerCase())) {
+        map.set(p.email.toLowerCase(), p);
+      }
+    });
+    localUsers.forEach((u) => {
+      if (u.email && !map.has(u.email.toLowerCase())) {
+        map.set(u.email.toLowerCase(), u);
+      }
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    );
   },
 
   async updateProfileStatus(userId: string, status: AccountStatus, notes?: string): Promise<UserProfile> {
     const updated = demoStore.updateUserStatus(userId, status, notes);
+
+    // Sync to Server API Registry
+    try {
+      if (typeof window !== 'undefined') {
+        fetch('/api/profiles', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, status, notes }),
+        }).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
 
     if (isSupabaseConfigured()) {
       try {
@@ -520,7 +584,6 @@ export const supabaseService = {
           .from('profiles')
           .update({
             status,
-            approval_status: status,
             notes: notes !== undefined ? notes : updated.notes,
             updated_at: new Date().toISOString(),
           })

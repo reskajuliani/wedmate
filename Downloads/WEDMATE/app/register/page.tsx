@@ -51,6 +51,14 @@ function RegisterContent() {
         wedding_date: formData.weddingDate || undefined,
       });
 
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('wedmate_pending_profile', JSON.stringify(newUser));
+        } catch {
+          // ignore
+        }
+      }
+
       try {
         await fetch('/api/auth/sync', {
           method: 'POST',
@@ -60,10 +68,6 @@ function RegisterContent() {
       } catch {
         // ignore
       }
-
-      // Strict Zero-Trust Security:
-      // PENDING user cannot create bookings. User is directed to /approval-pending.
-      // Once approved by admin, customer proceeds to booking.
 
       // Role is CUSTOMER and status is PENDING -> redirect to /approval-pending
       window.location.replace('/approval-pending');

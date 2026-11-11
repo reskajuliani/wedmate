@@ -25,6 +25,70 @@ export default function ApprovalPendingPage() {
   const [isChecking, setIsChecking] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; type: 'info' | 'success' | 'warning' } | null>(null);
 
+  // Candidate details fallback to guarantee Name, Email, and Phone are never empty
+  const [candidateProfile, setCandidateProfile] = useState<{
+    full_name: string;
+    email: string;
+    phone: string;
+  }>(() => {
+    let fn = user?.full_name || '';
+    let em = user?.email || '';
+    let ph = user?.phone || '';
+
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('wedmate_pending_profile');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (!fn) fn = parsed.full_name || '';
+          if (!em) em = parsed.email || '';
+          if (!ph) ph = parsed.phone || '';
+        }
+      } catch {
+        // ignore
+      }
+
+      if (!fn || !em || !ph) {
+        try {
+          const raw = document.cookie.match(/(?:^|;\s*)wedmate_session_user=([^;]+)/);
+          if (raw) {
+            const parsed = JSON.parse(decodeURIComponent(raw[1]));
+            if (!fn) fn = parsed.full_name || '';
+            if (!em) em = parsed.email || '';
+            if (!ph) ph = parsed.phone || '';
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return { full_name: fn, email: em, phone: ph };
+  });
+
+  React.useEffect(() => {
+    if (user?.full_name || user?.email || user?.phone) {
+      setCandidateProfile({
+        full_name: user.full_name || candidateProfile.full_name,
+        email: user.email || candidateProfile.email,
+        phone: user.phone || candidateProfile.phone,
+      });
+    } else if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('wedmate_pending_profile');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setCandidateProfile((prev) => ({
+            full_name: parsed.full_name || prev.full_name,
+            email: parsed.email || prev.email,
+            phone: parsed.phone || prev.phone,
+          }));
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [user]);
+
   const isPending = status === 'PENDING' || !status;
   const isRejected = status === 'REJECTED';
   const isApproved = status === 'APPROVED';
@@ -202,15 +266,15 @@ export default function ApprovalPendingPage() {
             <div className="p-4 bg-[#FAF8F5] rounded-2xl border border-[#E8E2D8] text-left text-xs space-y-2.5">
               <div className="flex justify-between border-b border-[#E8E2D8] pb-2">
                 <span className="text-[#1A1A1A]/50">Nama Pasangan:</span>
-                <span className="font-semibold text-[#1A1A1A]">{user?.full_name || '-'}</span>
+                <span className="font-semibold text-[#1A1A1A]">{candidateProfile.full_name || user?.full_name || '-'}</span>
               </div>
               <div className="flex justify-between border-b border-[#E8E2D8] pb-2">
                 <span className="text-[#1A1A1A]/50">Email Akun:</span>
-                <span className="font-semibold text-[#1A1A1A]">{user?.email || '-'}</span>
+                <span className="font-semibold text-[#1A1A1A]">{candidateProfile.email || user?.email || '-'}</span>
               </div>
               <div className="flex justify-between border-b border-[#E8E2D8] pb-2">
                 <span className="text-[#1A1A1A]/50">Nomor WhatsApp:</span>
-                <span className="font-semibold text-[#1A1A1A]">{user?.phone || '-'}</span>
+                <span className="font-semibold text-[#1A1A1A]">{candidateProfile.phone || user?.phone || '-'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[#1A1A1A]/50">Estimasi Review:</span>

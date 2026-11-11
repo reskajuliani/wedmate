@@ -274,15 +274,21 @@ class DemoStore {
     return this.state.users.find((u) => (u.email || '').trim().toLowerCase() === clean);
   }
 
-  public createUser(user: Omit<UserProfile, 'id' | 'created_at' | 'updated_at'>): UserProfile {
+  public createUser(user: Omit<UserProfile, 'id' | 'created_at' | 'updated_at'> & { id?: string }): UserProfile {
     const newUser: UserProfile = {
       ...user,
       approval_status: user.approval_status || user.status,
-      id: `c${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      id: user.id || `c${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      created_at: (user as any).created_at || new Date().toISOString(),
+      updated_at: (user as any).updated_at || new Date().toISOString(),
     };
-    this.state.users.push(newUser);
+    // Ensure we don't duplicate existing user with the same id or email
+    const existingIndex = this.state.users.findIndex((u) => u.id === newUser.id || u.email.toLowerCase() === newUser.email.toLowerCase());
+    if (existingIndex >= 0) {
+      this.state.users[existingIndex] = { ...this.state.users[existingIndex], ...newUser };
+    } else {
+      this.state.users.push(newUser);
+    }
     this.addActivity({
       action: 'USER_REGISTERED',
       entity_type: 'profiles',

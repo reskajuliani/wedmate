@@ -86,7 +86,7 @@ function AdminApprovalsContent() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Subscribe to updates & fetch via supabaseService
+  // Subscribe to updates & fetch via supabaseService + 10s auto-polling
   useEffect(() => {
     const refreshData = async () => {
       const allCustomers = await supabaseService.getProfiles('CUSTOMER');
@@ -97,7 +97,11 @@ function AdminApprovalsContent() {
 
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
-    return unsub;
+    const interval = setInterval(refreshData, 10000);
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
   }, []);
 
   // Pending counts
@@ -106,6 +110,9 @@ function AdminApprovalsContent() {
 
   // --- ACCOUNT ACTIONS ---
   const handleApproveAccount = async (targetUser: UserProfile) => {
+    setUsers((prev) =>
+      prev.map((u) => (u.id === targetUser.id ? { ...u, status: 'APPROVED', approval_status: 'APPROVED' } : u))
+    );
     await supabaseService.updateProfileStatus(targetUser.id, 'APPROVED');
     showToast(`Akun ${targetUser.full_name} berhasil DISETUJUI! Customer kini dapat login ke portal.`);
   };
@@ -117,7 +124,11 @@ function AdminApprovalsContent() {
 
   const handleConfirmRejectAccount = async () => {
     if (!rejectModalUser) return;
-    await supabaseService.updateProfileStatus(rejectModalUser.id, 'REJECTED', rejectReason.trim());
+    const reason = rejectReason.trim();
+    setUsers((prev) =>
+      prev.map((u) => (u.id === rejectModalUser.id ? { ...u, status: 'REJECTED', approval_status: 'REJECTED', notes: reason } : u))
+    );
+    await supabaseService.updateProfileStatus(rejectModalUser.id, 'REJECTED', reason);
     showToast(`Pendaftaran akun ${rejectModalUser.full_name} DITOLAK.`);
     setRejectModalUser(null);
   };
@@ -225,6 +236,19 @@ function AdminApprovalsContent() {
                 {pendingBookingsCount}
               </span>
             </div>
+            <button
+              onClick={async () => {
+                const allCustomers = await supabaseService.getProfiles('CUSTOMER');
+                setUsers(allCustomers);
+                const allBookings = await supabaseService.getBookings();
+                setBookings(allBookings);
+                showToast('Data akun dan booking berhasil disegarkan.');
+              }}
+              title="Segarkan data terbaru"
+              className="p-3 bg-[#FAF8F5] hover:bg-[#E8E2D8] border border-[#E8E2D8] rounded-2xl text-[#1A1A1A] transition cursor-pointer"
+            >
+              <RotateCcw className="w-5 h-5 text-[#C8A46A]" />
+            </button>
           </div>
         </div>
 
