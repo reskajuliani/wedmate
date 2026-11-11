@@ -233,3 +233,35 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const email = searchParams.get('email')?.toLowerCase();
+    const id = searchParams.get('id');
+
+    if (!email && !id) {
+      return NextResponse.json({ ok: false, error: 'Email or ID required' }, { status: 400 });
+    }
+
+    if (email) globalProfiles.delete(email);
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createAdminClient();
+        if (id) {
+          await supabase.from('profiles').delete().eq('id', id);
+        } else if (email) {
+          await supabase.from('profiles').delete().eq('email', email);
+        }
+      } catch (err: any) {
+        console.warn('DELETE /api/profiles error:', err.message);
+      }
+    }
+
+    return NextResponse.json({ ok: true, message: 'Profile deleted successfully' });
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
+  }
+}
+
