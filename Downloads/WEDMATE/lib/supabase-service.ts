@@ -453,17 +453,18 @@ export const supabaseService = {
     // Immediate local cache update for 0ms reactivity
     demoStore.createUser(profileData);
 
-    // Sync to Server API Registry for cross-device visibility
-    try {
-      if (typeof window !== 'undefined') {
-        fetch('/api/profiles', {
+    // Sync to Server API Registry for cross-device visibility (awaited)
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/profiles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(profileData),
-        }).catch(() => {});
+          keepalive: true,
+        });
+      } catch (err) {
+        console.warn('Sync /api/profiles error:', err);
       }
-    } catch {
-      // ignore
     }
 
     // Direct insertion into Supabase profiles database table
@@ -494,6 +495,23 @@ export const supabaseService = {
   },
 
   async getProfiles(role?: string): Promise<UserProfile[]> {
+    // 1. Fetch from server API registry first (runs with Admin Client on server, bypassing RLS)
+    let profilesFromApi: UserProfile[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/profiles' + (role ? `?role=${role}` : ''));
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.profiles)) {
+            profilesFromApi = json.profiles;
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch from /api/profiles:', err);
+      }
+    }
+
+    // 2. Fetch directly from Supabase (if configured)
     let profilesFromSupabase: UserProfile[] = [];
     if (isSupabaseConfigured()) {
       try {
@@ -523,29 +541,13 @@ export const supabaseService = {
       }
     }
 
-    // Also fetch from server API registry if in browser
-    let profilesFromApi: UserProfile[] = [];
-    if (typeof window !== 'undefined') {
-      try {
-        const res = await fetch('/api/profiles' + (role ? `?role=${role}` : ''));
-        if (res.ok) {
-          const json = await res.json();
-          if (Array.isArray(json.profiles)) {
-            profilesFromApi = json.profiles;
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    // Merge Supabase, Server API, and local demoStore profiles
+    // 3. Merge Server API, Supabase, and local demoStore profiles
     const localUsers = demoStore.getUsers().filter((u) => !role || u.role === role);
     const map = new Map<string, UserProfile>();
-    profilesFromSupabase.forEach((p) => {
+    profilesFromApi.forEach((p) => {
       if (p.email) map.set(p.email.toLowerCase(), p);
     });
-    profilesFromApi.forEach((p) => {
+    profilesFromSupabase.forEach((p) => {
       if (p.email && !map.has(p.email.toLowerCase())) {
         map.set(p.email.toLowerCase(), p);
       }
@@ -564,17 +566,18 @@ export const supabaseService = {
   async updateProfileStatus(userId: string, status: AccountStatus, notes?: string): Promise<UserProfile> {
     const updated = demoStore.updateUserStatus(userId, status, notes);
 
-    // Sync to Server API Registry
-    try {
-      if (typeof window !== 'undefined') {
-        fetch('/api/profiles', {
+    // Sync to Server API Registry (uses Admin Client on server to update Supabase directly)
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/profiles', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId, email: updated.email, status, notes }),
-        }).catch(() => {});
+          keepalive: true,
+        });
+      } catch (err) {
+        console.warn('Sync /api/profiles PATCH error:', err);
       }
-    } catch {
-      // ignore
     }
 
     if (isSupabaseConfigured()) {

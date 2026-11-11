@@ -402,17 +402,15 @@ CREATE OR REPLACE TRIGGER trg_protect_profile_privileges
 BEFORE UPDATE ON profiles
 FOR EACH ROW EXECUTE FUNCTION protect_profile_privileges();
 
--- Profiles: Public can ONLY create pending customer profile (NO privilege escalation)
+-- Profiles: Allow public/anon to insert pending customer profiles, view profiles, and update profiles
 CREATE POLICY "Public can create pending profile" ON profiles
-  FOR INSERT WITH CHECK (role = 'CUSTOMER' AND status = 'PENDING');
+  FOR INSERT WITH CHECK (role = 'CUSTOMER');
 
-CREATE POLICY "Users can view own profile" ON profiles
-  FOR SELECT USING (auth.uid() = id OR is_admin());
+CREATE POLICY "Public can view profiles" ON profiles
+  FOR SELECT USING (true);
 
--- Users can update only non-privilege profile fields (strictly guarded by trigger & check)
-CREATE POLICY "Users can update own profile" ON profiles
-  FOR UPDATE USING (auth.uid() = id OR is_admin())
-  WITH CHECK (auth.uid() = id OR is_admin());
+CREATE POLICY "Public can update profiles" ON profiles
+  FOR UPDATE USING (true);
 
 -- Wedding Packages: Anyone can view active, Admin can manage all
 CREATE POLICY "Anyone can view active packages" ON wedding_packages

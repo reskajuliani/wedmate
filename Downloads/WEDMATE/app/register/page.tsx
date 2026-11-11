@@ -59,11 +59,24 @@ function RegisterContent() {
         }
       }
 
+      // Explicitly ensure profile is persisted to server registry and Supabase
+      try {
+        await fetch('/api/profiles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newUser),
+          keepalive: true,
+        });
+      } catch (e) {
+        console.warn('Direct POST /api/profiles error:', e);
+      }
+
       try {
         await fetch('/api/auth/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user: newUser }),
+          keepalive: true,
         });
       } catch {
         // ignore

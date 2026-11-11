@@ -1,19 +1,18 @@
 import { NextResponse } from 'next/server';
-import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const configured = isSupabaseConfigured();
   let supabaseTest: any = null;
-  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const cleanUrl = rawUrl.trim().replace(/\/+$/, '');
 
   if (configured) {
     try {
-      const supabase = createClient();
+      const supabase = createAdminClient();
       
-      // Test select profiles
+      // Test select profiles with admin client
       const profilesRes = await supabase.from('profiles').select('*', { count: 'exact' });
       
       // Test select packages
@@ -22,29 +21,9 @@ export async function GET() {
       // Test select bookings
       const bookingsRes = await supabase.from('bookings').select('*', { count: 'exact' });
 
-      // Test insert into profiles with a test record
-      const testId = '00000000-0000-4000-8000-000000000001';
-      const testInsertRes = await supabase.from('profiles').insert({
-        id: testId,
-        email: 'test_probe@wedmate.id',
-        full_name: 'Probe Test',
-        phone: '08123456789',
-        role: 'CUSTOMER',
-        status: 'PENDING',
-        notes: 'Health probe',
-      });
-
-      // Try selecting the probe back
-      const probeRes = await supabase.from('profiles').select('*').eq('email', 'test_probe@wedmate.id');
-
-      // Clean up probe if it was inserted
-      if (!testInsertRes.error) {
-        await supabase.from('profiles').delete().eq('id', testId);
-      }
-
       supabaseTest = {
         hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-        profiles: {
+        adminProfiles: {
           success: !profilesRes.error,
           error: profilesRes.error ? profilesRes.error.message : null,
           count: profilesRes.count,
@@ -60,16 +39,6 @@ export async function GET() {
           error: bookingsRes.error ? bookingsRes.error.message : null,
           count: bookingsRes.count,
         },
-        testInsert: {
-          success: !testInsertRes.error,
-          error: testInsertRes.error ? testInsertRes.error.message : null,
-          details: testInsertRes.error ? testInsertRes.error.details : null,
-          code: testInsertRes.error ? testInsertRes.error.code : null,
-        },
-        probeSelect: {
-          success: !probeRes.error,
-          found: probeRes.data ? probeRes.data.length : 0,
-        },
       };
     } catch (e: any) {
       supabaseTest = { success: false, exception: e.message };
@@ -83,4 +52,5 @@ export async function GET() {
     nodeEnv: process.env.NODE_ENV,
   });
 }
+
 

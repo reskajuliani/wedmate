@@ -86,19 +86,29 @@ function AdminApprovalsContent() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Subscribe to updates & fetch via supabaseService + 10s auto-polling
+  // Subscribe to updates & fetch via supabaseService + 4s auto-polling
   useEffect(() => {
+    let isMounted = true;
     const refreshData = async () => {
-      const allCustomers = await supabaseService.getProfiles('CUSTOMER');
-      setUsers(allCustomers);
-      const allBookings = await supabaseService.getBookings();
-      setBookings(allBookings);
+      try {
+        const allCustomers = await supabaseService.getProfiles('CUSTOMER');
+        if (isMounted) setUsers(allCustomers);
+      } catch (e) {
+        console.warn('Error loading customers:', e);
+      }
+      try {
+        const allBookings = await supabaseService.getBookings();
+        if (isMounted) setBookings(allBookings);
+      } catch (e) {
+        console.warn('Error loading bookings:', e);
+      }
     };
 
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
-    const interval = setInterval(refreshData, 10000);
+    const interval = setInterval(refreshData, 4000);
     return () => {
+      isMounted = false;
       unsub();
       clearInterval(interval);
     };

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { UserProfile } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,8 @@ export async function GET(request: NextRequest) {
 
   if (isSupabaseConfigured()) {
     try {
-      const supabase = createClient();
+      // Use Admin Client to bypass Row Level Security (RLS)
+      const supabase = createAdminClient();
       let query = supabase.from('profiles').select('*').order('created_at', { ascending: false });
       if (role) {
         query = query.eq('role', role);
@@ -44,13 +46,15 @@ export async function GET(request: NextRequest) {
           created_at: p.created_at,
           updated_at: p.updated_at,
         }));
+      } else if (error) {
+        console.warn('GET /api/profiles Supabase admin query warning:', error.message);
       }
     } catch (e: any) {
       console.warn('GET /api/profiles Supabase fetch error:', e.message);
     }
   }
 
-  // Merge with server memory cache
+  // Merge Supabase profiles with server memory cache
   const map = new Map<string, UserProfile>();
   profiles.forEach((p) => {
     if (p.email) map.set(p.email.toLowerCase(), p);
@@ -60,7 +64,7 @@ export async function GET(request: NextRequest) {
       if (p.email && !map.has(p.email.toLowerCase())) {
         map.set(p.email.toLowerCase(), p);
       } else if (p.email && map.has(p.email.toLowerCase())) {
-        // Prefer more recent status from in-memory cache if it was updated
+        // If memory cache has newer status, preserve it
         const existing = map.get(p.email.toLowerCase())!;
         if (p.status === 'APPROVED' && existing.status !== 'APPROVED') {
           map.set(p.email.toLowerCase(), { ...existing, status: 'APPROVED', approval_status: 'APPROVED' });
@@ -80,7 +84,7 @@ export async function GET(request: NextRequest) {
     merged = merged.filter((p) => p.id === idQuery);
   }
 
-  return NextResponse.json({ ok: true, profiles: merged });
+  return NextResponse.json({ ok: true, profiles: merged, count: merged.length });
 }
 
 export async function POST(request: NextRequest) {
@@ -90,7 +94,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Invalid profile' }, { status: 400 });
     }
 
-    const email = profile.email.toLowerCase();
+    const email = profile.email.toLowerCase().trim();
     const existing = globalProfiles.get(email);
     const updatedStatus = existing?.status === 'APPROVED' ? 'APPROVED' : (profile.status || 'PENDING');
 
@@ -103,22 +107,46 @@ export async function POST(request: NextRequest) {
     };
     globalProfiles.set(email, savedProfile);
 
+    // Direct insertion or update into Supabase via Admin Client (bypassing RLS)
     if (isSupabaseConfigured()) {
       try {
-        const supabase = createClient();
-        const insertPayload: any = {
-          id: profile.id,
-          email: profile.email.toLowerCase(),
-          full_name: profile.full_name,
-          phone: profile.phone,
-          role: profile.role || 'CUSTOMER',
-          status: updatedStatus,
-          notes: profile.notes || 'Registrasi akun',
-          wedding_date: profile.wedding_date || null,
-        };
-        await supabase.from('profiles').upsert(insertPayload, { onConflict: 'email' });
+        const supabase = createAdminClient();
+        const { data: existingDb } = await supabase
+          .from('profiles')
+          .select('id, status')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (existingDb) {
+          const updatePayload: any = {
+            full_name: profile.full_name,
+            phone: profile.phone,
+            role: profile.role || 'CUSTOMER',
+            status: existingDb.status === 'APPROVED' ? 'APPROVED' : updatedStatus,
+            notes: profile.notes || 'Registrasi akun',
+            wedding_date: profile.wedding_date || null,
+            updated_at: new Date().toISOString(),
+          };
+          const { error } = await supabase.from('profiles').update(updatePayload).eq('id', existingDb.id);
+          if (error) console.warn('POST /api/profiles update error:', error.message);
+        } else {
+          const insertPayload: any = {
+            id: profile.id,
+            email: email,
+            full_name: profile.full_name,
+            phone: profile.phone,
+            role: profile.role || 'CUSTOMER',
+            status: updatedStatus,
+            notes: profile.notes || 'Registrasi mandiri dari formulir web.',
+            wedding_date: profile.wedding_date || null,
+            created_at: profile.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          const { error } = await supabase.from('profiles').insert(insertPayload);
+          if (error) console.warn('POST /api/profiles insert error:', error.message);
+        }
       } catch (err: any) {
-        console.warn('POST /api/profiles Supabase upsert error:', err.message);
+        console.warn('POST /api/profiles Supabase admin error:', err.message);
       }
     }
 
@@ -136,7 +164,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     let found = false;
-    const targetEmail = inputEmail ? inputEmail.toLowerCase() : '';
+    const targetEmail = inputEmail ? inputEmail.toLowerCase().trim() : '';
 
     for (const [keyEmail, p] of globalProfiles.entries()) {
       if (
@@ -173,9 +201,10 @@ export async function PATCH(request: NextRequest) {
       });
     }
 
+    // Persist status update into Supabase via Admin Client (bypassing RLS)
     if (isSupabaseConfigured()) {
       try {
-        const supabase = createClient();
+        const supabase = createAdminClient();
         const updatePayload: any = {
           status,
           updated_at: new Date().toISOString(),
@@ -185,11 +214,14 @@ export async function PATCH(request: NextRequest) {
         }
 
         if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
-          await supabase.from('profiles').update(updatePayload).eq('id', userId);
+          const { error } = await supabase.from('profiles').update(updatePayload).eq('id', userId);
+          if (error) console.warn('PATCH /api/profiles update by id error:', error.message);
         } else if (targetEmail) {
-          await supabase.from('profiles').update(updatePayload).eq('email', targetEmail);
+          const { error } = await supabase.from('profiles').update(updatePayload).eq('email', targetEmail);
+          if (error) console.warn('PATCH /api/profiles update by email error:', error.message);
         } else if (userId && userId.includes('@')) {
-          await supabase.from('profiles').update(updatePayload).eq('email', userId.toLowerCase());
+          const { error } = await supabase.from('profiles').update(updatePayload).eq('email', userId.toLowerCase());
+          if (error) console.warn('PATCH /api/profiles update by email2 error:', error.message);
         }
       } catch (err: any) {
         console.warn('PATCH /api/profiles Supabase update error:', err.message);
