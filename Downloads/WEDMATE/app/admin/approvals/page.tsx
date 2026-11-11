@@ -114,6 +114,15 @@ function AdminApprovalsContent() {
       prev.map((u) => (u.id === targetUser.id ? { ...u, status: 'APPROVED', approval_status: 'APPROVED' } : u))
     );
     await supabaseService.updateProfileStatus(targetUser.id, 'APPROVED');
+    try {
+      await fetch('/api/profiles', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: targetUser.id, email: targetUser.email, status: 'APPROVED' }),
+      });
+    } catch {
+      // ignore
+    }
     showToast(`Akun ${targetUser.full_name} berhasil DISETUJUI! Customer kini dapat login ke portal.`);
   };
 
@@ -129,6 +138,15 @@ function AdminApprovalsContent() {
       prev.map((u) => (u.id === rejectModalUser.id ? { ...u, status: 'REJECTED', approval_status: 'REJECTED', notes: reason } : u))
     );
     await supabaseService.updateProfileStatus(rejectModalUser.id, 'REJECTED', reason);
+    try {
+      await fetch('/api/profiles', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: rejectModalUser.id, email: rejectModalUser.email, status: 'REJECTED', notes: reason }),
+      });
+    } catch {
+      // ignore
+    }
     showToast(`Pendaftaran akun ${rejectModalUser.full_name} DITOLAK.`);
     setRejectModalUser(null);
   };

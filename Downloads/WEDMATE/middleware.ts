@@ -81,6 +81,46 @@ export async function middleware(request: NextRequest) {
         if (authStatus === 'APPROVED') {
           return response; // Customer terverifikasi diizinkan
         }
+
+        // Live database verification if cookie hasn't updated yet
+        const rawDbUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/+$/, '').replace(/\/rest\/v1\/?$/, '');
+        const dbAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+        const hasDb = Boolean(rawDbUrl && dbAnonKey && !rawDbUrl.includes('your-project-id') && !rawDbUrl.includes('placeholder'));
+
+        if (hasDb && (sessionUser?.id || sessionUser?.email)) {
+          try {
+            const supabase = createServerClient(rawDbUrl, dbAnonKey, {
+              cookies: {
+                getAll() {
+                  return request.cookies.getAll();
+                },
+                setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
+                  cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+                  cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+                },
+              },
+            });
+            const q = sessionUser?.id
+              ? supabase.from('profiles').select('status, approval_status').eq('id', sessionUser.id).single()
+              : supabase.from('profiles').select('status, approval_status').eq('email', sessionUser!.email.toLowerCase()).single();
+
+            // Run with 1500ms timeout to avoid hanging request
+            const dbPromise = q.then((res: any) => res?.data);
+            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 1500));
+            const dbProfile: any = await Promise.race([dbPromise, timeoutPromise]);
+
+            const dbStatus = dbProfile?.approval_status || dbProfile?.status;
+            if (dbStatus === 'APPROVED') {
+              response.cookies.set('wedmate_user_status', 'APPROVED', { path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
+              response.cookies.set('wedmate_status', 'APPROVED', { path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
+              response.cookies.set('wedmate_user_approval_status', 'APPROVED', { path: '/', maxAge: 60 * 60 * 24 * 7, sameSite: 'lax' });
+              return response;
+            }
+          } catch {
+            // ignore
+          }
+        }
+
         return NextResponse.redirect(new URL('/approval-pending', request.url));
       }
       return NextResponse.redirect(new URL('/admin/approvals', request.url));
@@ -90,8 +130,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // 2. Jika tidak ada cookie sesi WEDMATE, periksa Supabase Auth (jika kredensial terkonfigurasi)
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/+$/, '').replace(/\/rest\/v1\/?$/, '');
+  const key = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim();
   const isSupabaseConfigured = Boolean(
     url &&
     key &&

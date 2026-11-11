@@ -28,6 +28,13 @@ export interface DemoDatabaseState {
 
 const STORAGE_KEY = 'wedmate_appfirst_portal_v5';
 
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
+}
+
 // Initial Seed Data - ZERO MOCK DATA STRATEGY: Only base system admin seeded
 const INITIAL_USERS: UserProfile[] = [
   {
@@ -277,13 +284,14 @@ class DemoStore {
   public createUser(user: Omit<UserProfile, 'id' | 'created_at' | 'updated_at'> & { id?: string }): UserProfile {
     const newUser: UserProfile = {
       ...user,
-      approval_status: user.approval_status || user.status,
-      id: user.id || `c${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      approval_status: user.approval_status || user.status || 'PENDING',
+      status: user.status || user.approval_status || 'PENDING',
+      id: user.id || generateUUID(),
       created_at: (user as any).created_at || new Date().toISOString(),
       updated_at: (user as any).updated_at || new Date().toISOString(),
     };
     // Ensure we don't duplicate existing user with the same id or email
-    const existingIndex = this.state.users.findIndex((u) => u.id === newUser.id || u.email.toLowerCase() === newUser.email.toLowerCase());
+    const existingIndex = this.state.users.findIndex((u) => u.id === newUser.id || (u.email && newUser.email && u.email.toLowerCase() === newUser.email.toLowerCase()));
     if (existingIndex >= 0) {
       this.state.users[existingIndex] = { ...this.state.users[existingIndex], ...newUser };
     } else {
@@ -300,8 +308,24 @@ class DemoStore {
   }
 
   public updateUserStatus(id: string, status: AccountStatus, reason?: string): UserProfile {
-    const userIndex = this.state.users.findIndex((u) => u.id === id);
-    if (userIndex === -1) throw new Error('User not found');
+    let userIndex = this.state.users.findIndex((u) => u.id === id || (u.email && u.email.toLowerCase() === id.toLowerCase()));
+    if (userIndex === -1) {
+      const isEmail = id.includes('@');
+      const newUser: UserProfile = {
+        id: isEmail ? generateUUID() : id,
+        email: isEmail ? id.toLowerCase() : '',
+        full_name: 'Calon Pengantin',
+        phone: '',
+        role: 'CUSTOMER',
+        status,
+        approval_status: status,
+        notes: reason || '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      this.state.users.push(newUser);
+      userIndex = this.state.users.length - 1;
+    }
 
     const updated = {
       ...this.state.users[userIndex],
@@ -315,7 +339,7 @@ class DemoStore {
     this.addActivity({
       action: `USER_${status}`,
       entity_type: 'profiles',
-      entity_id: id,
+      entity_id: updated.id,
       details: { email: updated.email, new_status: status, reason },
     });
 
@@ -405,7 +429,7 @@ class DemoStore {
     if (!pkg) throw new Error('Package not found');
 
     const newBooking: Booking = {
-      id: `b${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: generateUUID(),
       customer_id: data.customer_id,
       package_id: data.package_id,
       wedding_date: data.wedding_date,
@@ -645,7 +669,7 @@ class DemoStore {
   public createTask(task: Omit<WeddingTask, 'id' | 'created_at' | 'updated_at'>): WeddingTask {
     const newTask: WeddingTask = {
       ...task,
-      id: `t${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: generateUUID(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -744,7 +768,7 @@ class DemoStore {
   }): PaymentTransaction {
     const txNumber = `TX/${new Date().getFullYear()}/${data.payment_method}-${Math.floor(10000 + Math.random() * 90000)}`;
     const newTx: PaymentTransaction = {
-      id: `x${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: generateUUID(),
       payment_id: data.payment_id,
       customer_id: data.customer_id,
       transaction_number: txNumber,

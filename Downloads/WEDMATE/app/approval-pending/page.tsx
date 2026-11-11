@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { demoStore } from '@/lib/demo-store';
+import { UserProfile } from '@/lib/types';
 import {
   Clock,
   ShieldAlert,
@@ -93,24 +94,46 @@ export default function ApprovalPendingPage() {
   const isRejected = status === 'REJECTED';
   const isApproved = status === 'APPROVED';
 
-  // Periksa Status: fetch latest approval status directly from Supabase / demoStore
-  const handleCheckStatus = async () => {
-    setIsChecking(true);
-    setFeedback(null);
+  // Periksa Status: fetch latest approval status directly from Server API Registry / Supabase / demoStore
+  const handleCheckStatus = async (isAutoPoll = false) => {
+    if (!isAutoPoll) {
+      setIsChecking(true);
+      setFeedback(null);
+    }
 
     try {
-      let currentStatus = status;
+      let currentStatus = status || 'PENDING';
+      const targetEmail = (candidateProfile.email || user?.email || '').toLowerCase();
+      const targetId = user?.id;
 
-      // 1. Coba periksa data profil langsung dari Supabase jika terkonfigurasi
-      if (isSupabaseConfigured() && user?.id) {
+      // 1. Prioritas Pertama: Periksa data profil dari server API registry
+      try {
+        const res = await fetch('/api/profiles');
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.profiles)) {
+            const matched = json.profiles.find((p: any) =>
+              (targetEmail && p.email && p.email.toLowerCase() === targetEmail) ||
+              (targetId && p.id === targetId)
+            );
+            if (matched) {
+              currentStatus = matched.approval_status || matched.status;
+              demoStore.createUser(matched);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('API status check error:', err);
+      }
+
+      // 2. Coba periksa data profil langsung dari Supabase jika terkonfigurasi
+      if (currentStatus !== 'APPROVED' && isSupabaseConfigured() && (targetId || targetEmail)) {
         try {
           const supabase = createClient();
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role, status, approval_status')
-            .eq('id', user.id)
-            .single();
-
+          const query = targetId
+            ? supabase.from('profiles').select('role, status, approval_status').eq('id', targetId).single()
+            : supabase.from('profiles').select('role, status, approval_status').eq('email', targetEmail).single();
+          const { data: profile } = await query;
           if (profile) {
             currentStatus = profile.approval_status || profile.status;
           }
@@ -119,45 +142,104 @@ export default function ApprovalPendingPage() {
         }
       }
 
-      // 2. Periksa data dari demoStore jika Supabase offline / local mode
-      if (user?.id) {
-        const storeUser = demoStore.getUserById(user.id);
+      // 3. Periksa data dari demoStore jika local mode
+      if (currentStatus !== 'APPROVED' && (targetId || targetEmail)) {
+        const storeUser = (targetId ? demoStore.getUserById(targetId) : null) || (targetEmail ? demoStore.getUserByEmail(targetEmail) : null);
         if (storeUser) {
           currentStatus = storeUser.approval_status || storeUser.status;
         }
       }
 
-      // 3. Trigger refresh context
-      refreshUser();
-
+      // Jika disetujui (APPROVED), sinkronisasikan cookie & server session secara permanen
       if (currentStatus === 'APPROVED') {
+        const resolvedUser: UserProfile = {
+          id: targetId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'c' + Date.now()),
+          email: targetEmail,
+          full_name: candidateProfile.full_name || user?.full_name || 'Calon Pengantin',
+          phone: candidateProfile.phone || user?.phone || '',
+          role: 'CUSTOMER',
+          status: 'APPROVED',
+          approval_status: 'APPROVED',
+          created_at: user?.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        // Simpan ke local store & local storage
+        demoStore.createUser(resolvedUser);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('wedmate_active_user_id', resolvedUser.id);
+          const isHttps = window.location.protocol === 'https:';
+          const secureFlag = isHttps ? '; Secure' : '';
+          const maxAge = 60 * 60 * 24 * 7;
+          document.cookie = `wedmate_user_id=${resolvedUser.id}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+          document.cookie = `wedmate_user_role=CUSTOMER; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+          document.cookie = `wedmate_role=CUSTOMER; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+          document.cookie = `wedmate_user_status=APPROVED; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+          document.cookie = `wedmate_status=APPROVED; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+          document.cookie = `wedmate_user_approval_status=APPROVED; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+          document.cookie = `wedmate_session_user=${encodeURIComponent(JSON.stringify(resolvedUser))}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+        }
+
+        // Sinkronisasi cookie HTTP ke server Vercel
+        try {
+          await fetch('/api/auth/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: resolvedUser }),
+          });
+        } catch {
+          // ignore
+        }
+
+        refreshUser();
+
         setFeedback({
           type: 'success',
           message: 'Selamat! Akun Anda telah disetujui oleh Admin. Mengalihkan ke dashboard booking...',
         });
         setTimeout(() => {
-          window.location.assign('/customer/booking');
-        }, 1200);
-      } else if (currentStatus === 'REJECTED') {
-        setFeedback({
-          type: 'warning',
-          message: 'Pendaftaran akun Anda ditolak oleh Admin. Silakan hubungi Concierge WA untuk informasi lebih lanjut.',
-        });
-      } else {
-        setFeedback({
-          type: 'info',
-          message: 'Status akun Anda masih dalam proses peninjauan oleh tim Admin WEDMATE. Mohon menunggu maksimal 1x24 jam kerja.',
-        });
+          window.location.replace('/customer/booking');
+        }, 1000);
+        return;
+      }
+
+      refreshUser();
+
+      if (!isAutoPoll) {
+        if (currentStatus === 'REJECTED') {
+          setFeedback({
+            type: 'warning',
+            message: 'Pendaftaran akun Anda ditolak oleh Admin. Silakan hubungi Concierge WA untuk informasi lebih lanjut.',
+          });
+        } else {
+          setFeedback({
+            type: 'info',
+            message: 'Status akun Anda masih dalam proses peninjauan oleh tim Admin WEDMATE. Mohon menunggu maksimal 1x24 jam kerja.',
+          });
+        }
       }
     } catch {
-      setFeedback({
-        type: 'info',
-        message: 'Status saat ini: Menunggu Persetujuan Admin. Tim kurasi kami sedang memproses pendaftaran Anda.',
-      });
+      if (!isAutoPoll) {
+        setFeedback({
+          type: 'info',
+          message: 'Status saat ini: Menunggu Persetujuan Admin. Tim kurasi kami sedang memproses pendaftaran Anda.',
+        });
+      }
     } finally {
-      setIsChecking(false);
+      if (!isAutoPoll) {
+        setIsChecking(false);
+      }
     }
   };
+
+  // Background Auto-Poll: Silently checks status every 5 seconds so user is redirected immediately after approval
+  React.useEffect(() => {
+    if (isApproved) return;
+    const interval = setInterval(() => {
+      handleCheckStatus(true);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isApproved, candidateProfile.email, user?.id]);
 
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-[#FAF8F5]">
@@ -286,7 +368,7 @@ export default function ApprovalPendingPage() {
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={handleCheckStatus}
+                onClick={() => handleCheckStatus(false)}
                 disabled={isChecking}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-[#C8A46A] hover:bg-[#b59157] text-white font-semibold text-xs shadow-sm transition active:scale-95 disabled:opacity-60 cursor-pointer"
               >

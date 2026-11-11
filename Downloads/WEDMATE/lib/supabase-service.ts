@@ -570,7 +570,7 @@ export const supabaseService = {
         fetch('/api/profiles', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, status, notes }),
+          body: JSON.stringify({ userId, email: updated.email, status, notes }),
         }).catch(() => {});
       }
     } catch {
@@ -580,14 +580,16 @@ export const supabaseService = {
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
-        await supabase
-          .from('profiles')
-          .update({
-            status,
-            notes: notes !== undefined ? notes : updated.notes,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', userId);
+        const updateData: any = {
+          status,
+          notes: notes !== undefined ? notes : updated.notes,
+          updated_at: new Date().toISOString(),
+        };
+        if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+          await supabase.from('profiles').update(updateData).eq('id', userId);
+        } else if (updated.email) {
+          await supabase.from('profiles').update(updateData).eq('email', updated.email.toLowerCase());
+        }
       } catch (err) {
         console.warn('Supabase updateProfileStatus sync error:', err);
       }

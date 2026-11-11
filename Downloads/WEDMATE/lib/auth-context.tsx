@@ -235,11 +235,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       try {
         const cleanEmail = (email || '').trim().toLowerCase();
-        let user = demoStore.getUserByEmail(cleanEmail);
+        let user: UserProfile | undefined = undefined;
 
-        // Fallback: If user enters any variation of admin, match the admin account
-        if (!user && (cleanEmail === 'admin' || cleanEmail.startsWith('admin@') || cleanEmail.includes('admin'))) {
+        // 1. Fallback: If user enters any variation of admin, match the admin account
+        if (cleanEmail === 'admin' || cleanEmail.startsWith('admin@') || cleanEmail.includes('admin')) {
           user = demoStore.getUsers().find((u) => u.role === 'ADMIN') || demoStore.getUserById(CANONICAL_ADMIN_ID);
+        } else {
+          // 2. Query remote API profiles to get the authoritative, up-to-date status (APPROVED / PENDING)
+          try {
+            const res = await fetch('/api/profiles');
+            if (res.ok) {
+              const json = await res.json();
+              if (Array.isArray(json.profiles)) {
+                const found = json.profiles.find((p: UserProfile) =>
+                  (p.email && p.email.toLowerCase() === cleanEmail) || p.id === cleanEmail
+                );
+                if (found) {
+                  user = found;
+                  demoStore.createUser(found);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('API profile lookup error during login:', e);
+          }
+
+          if (!user) {
+            user = demoStore.getUserByEmail(cleanEmail);
+          }
         }
 
         if (!user) {
@@ -509,7 +532,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (currentUser?.role === 'ADMIN' && currentUser?.id === CANONICAL_ADMIN_ID) {
         router.push('/admin/approvals');
       } else if (currentUser?.role === 'CUSTOMER' && (currentUser.status === 'APPROVED' || currentUser.approval_status === 'APPROVED')) {
-        router.push('/customer/booking');
+        const cookieStatus = getCookieValue('wedmate_user_status') || getCookieValue('wedmate_status');
+        if (cookieStatus === 'APPROVED') {
+          router.push('/customer/booking');
+        } else {
+          // Synchronize cookies first before redirecting to prevent fighting server middleware
+          syncAuthCookies(currentUser);
+          fetch('/api/auth/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: currentUser }),
+          }).finally(() => {
+            window.location.replace('/customer/booking');
+          });
+        }
       }
       return;
     }
