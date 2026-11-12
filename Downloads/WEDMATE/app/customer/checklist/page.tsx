@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { demoStore } from '@/lib/demo-store';
@@ -24,6 +24,7 @@ import {
   PartyPopper,
 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { buildTasksForBooking } from '@/lib/task-generator';
 
 const CATEGORIES: WeddingTask['category'][] = [
   'Venue',
@@ -80,27 +81,38 @@ function calculateCountdown(targetDateStr: string): TimeRemaining {
 export default function CustomerChecklistPage() {
   const { user } = useAuth();
   const customerId = user?.id || '';
+  const effectiveCustomerId =
+    customerId ||
+    (typeof window !== 'undefined'
+      ? localStorage.getItem('wedmate_active_user_id') || localStorage.getItem('wedmate_user_id') || ''
+      : '');
 
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Initial State: prioritize confirmed bookings from demoStore if any
   const [project, setProject] = useState<WeddingProject | null>(() => {
-    if (!customerId) return null;
-    const userProjects = demoStore.getProjects(customerId);
+    if (!effectiveCustomerId) return null;
+    const userProjects = demoStore.getProjects(effectiveCustomerId);
     return userProjects.length > 0 ? userProjects[0] : null;
   });
+
   const [tasks, setTasks] = useState<WeddingTask[]>(() => {
-    if (!customerId) return [];
-    const userProjects = demoStore.getProjects(customerId);
+    if (!effectiveCustomerId) return [];
+    const userProjects = demoStore.getProjects(effectiveCustomerId);
     if (userProjects.length > 0) {
       return userProjects[0].tasks || demoStore.getTasksByProjectId(userProjects[0].id);
     }
     return [];
   });
+
   const [confirmedBooking, setConfirmedBooking] = useState<Booking | null>(() => {
-    if (!customerId) return null;
-    return demoStore.getBookings(customerId).find((b) => b.status === 'CONFIRMED') || null;
+    if (!effectiveCustomerId) return null;
+    return demoStore.getBookings(effectiveCustomerId).find((b) => b.status === 'CONFIRMED') || null;
   });
+
   const [pendingBooking, setPendingBooking] = useState<Booking | null>(() => {
-    if (!customerId) return null;
-    return demoStore.getBookings(customerId).find((b) => b.status === 'PENDING') || null;
+    if (!effectiveCustomerId) return null;
+    return demoStore.getBookings(effectiveCustomerId).find((b) => b.status === 'PENDING') || null;
   });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -116,54 +128,116 @@ export default function CustomerChecklistPage() {
     isPast: false,
   });
 
+  // Track active fetching state to prevent parallel overlapping requests
+  const isFetchingRef = useRef(false);
+
+  // SMART POLLING: Sequential fetch (only after prior finishes) + paused on hidden tabs
   useEffect(() => {
     let isMounted = true;
+    let pollTimer: NodeJS.Timeout | null = null;
+
     const refreshData = async () => {
-      if (!customerId) return;
-      const [userProjects, userBookings] = await Promise.all([
-        supabaseService.getProjects(customerId),
-        supabaseService.getBookings(customerId),
-      ]);
-      if (!isMounted) return;
+      if (!effectiveCustomerId) return;
+      try {
+        const [userProjects, userBookings] = await Promise.all([
+          supabaseService.getProjects(effectiveCustomerId),
+          supabaseService.getBookings(effectiveCustomerId),
+        ]);
+        if (!isMounted) return;
 
-      const confirmed = userBookings.find((b) => b.status === 'CONFIRMED');
-      const pending = userBookings.find((b) => b.status === 'PENDING');
+        // Strictly prioritize CONFIRMED booking over any pending drafts
+        const confirmed = userBookings.find((b) => b.status === 'CONFIRMED');
+        const pending = userBookings.find((b) => b.status === 'PENDING');
 
-      setConfirmedBooking(confirmed || null);
-      setPendingBooking(pending || null);
+        setConfirmedBooking(confirmed || null);
+        setPendingBooking(pending || null);
 
-      if (userProjects.length > 0) {
-        const currentProject = userProjects[0];
-        setProject(currentProject);
-        setTasks(currentProject.tasks || demoStore.getTasksByProjectId(currentProject.id));
-      } else {
-        setProject(null);
-        setTasks([]);
+        if (userProjects.length > 0) {
+          const currentProject = userProjects[0];
+          setProject(currentProject);
+          setTasks(currentProject.tasks || demoStore.getTasksByProjectId(currentProject.id));
+        } else if (confirmed) {
+          // Fallback project & package-specific tasks synthesized directly from confirmed booking
+          const synthTasks = buildTasksForBooking(confirmed, 'proj-' + confirmed.id);
+          const fallbackProj: WeddingProject = {
+            id: 'proj-' + confirmed.id,
+            booking_id: confirmed.id,
+            customer_id: confirmed.customer_id,
+            title: `Pernikahan ${user?.full_name || confirmed.customer?.full_name || 'Klien'}`,
+            wedding_date: confirmed.wedding_date,
+            progress_percent: 0,
+            notes: `Lokasi: ${confirmed.venue_name}`,
+            created_at: confirmed.created_at || new Date().toISOString(),
+            updated_at: confirmed.updated_at || new Date().toISOString(),
+            tasks: synthTasks,
+          };
+          setProject(fallbackProj);
+          setTasks(synthTasks);
+        } else {
+          setProject(null);
+          setTasks([]);
+        }
+      } catch (err) {
+        console.warn('Refresh error in customer checklist:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     };
 
-    refreshData();
-    const unsub = demoStore.subscribe(refreshData);
-    const interval = setInterval(refreshData, 3000);
+    const executeSmartPoll = async () => {
+      if (!isMounted || !effectiveCustomerId) return;
+      // Pause polling if browser tab is hidden or backgrounded
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (isFetchingRef.current) return;
+
+      isFetchingRef.current = true;
+      try {
+        await refreshData();
+      } finally {
+        isFetchingRef.current = false;
+        // Schedule NEXT poll only after current request is 100% completed
+        if (isMounted) {
+          pollTimer = setTimeout(executeSmartPoll, 3000);
+        }
+      }
+    };
+
+    // Immediate first execution
+    executeSmartPoll();
+
+    // Listen for tab focus/visibility change to resume instantly
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden && isMounted && !isFetchingRef.current) {
+        if (pollTimer) clearTimeout(pollTimer);
+        executeSmartPoll();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const unsub = demoStore.subscribe(executeSmartPoll);
+
     return () => {
       isMounted = false;
+      if (pollTimer) clearTimeout(pollTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsub();
-      clearInterval(interval);
     };
-  }, [customerId]);
+  }, [effectiveCustomerId, user?.full_name]);
+
+  // Active Project Reference (Prioritize project object or confirmed booking)
+  const activeWeddingDate = project?.wedding_date || confirmedBooking?.wedding_date || '';
+  const activeTitle = project?.title || (confirmedBooking ? `Pernikahan ${user?.full_name || 'Pengantin'}` : '');
 
   // Real-time Countdown effect
   useEffect(() => {
-    if (!project?.wedding_date && !confirmedBooking?.wedding_date) return;
-    const dateStr = project?.wedding_date || confirmedBooking?.wedding_date || '';
-
-    setCountdown(calculateCountdown(dateStr));
+    if (!activeWeddingDate) return;
+    setCountdown(calculateCountdown(activeWeddingDate));
     const timer = setInterval(() => {
-      setCountdown(calculateCountdown(dateStr));
+      setCountdown(calculateCountdown(activeWeddingDate));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [project?.wedding_date, confirmedBooking?.wedding_date]);
+  }, [activeWeddingDate]);
 
   // Filter tasks
   const filteredTasks = tasks.filter((task) => {
@@ -179,7 +253,10 @@ export default function CustomerChecklistPage() {
   const completedCount = tasks.filter((t) => t.status === 'COMPLETED').length;
   const inProgressCount = tasks.filter((t) => t.status === 'IN_PROGRESS').length;
   const todoCount = tasks.filter((t) => t.status === 'TODO').length;
-  const progressPercent = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
+  const progressPercent = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : (project?.progress_percent || 0);
+
+  // If client has a confirmed booking or an active project, that is their definitive wedding project
+  const hasActiveConfirmedProject = Boolean(project || confirmedBooking);
 
   return (
     <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">
@@ -199,48 +276,54 @@ export default function CustomerChecklistPage() {
           </div>
         </div>
 
-        {/* CASE 1: NO PROJECT YET */}
-        {!project ? (
-          <div>
-            {pendingBooking ? (
-              <div className="bg-white rounded-3xl p-8 border border-[#E8E2D8] shadow-xs text-center max-w-2xl mx-auto space-y-4">
-                <div className="w-14 h-14 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
-                  <Clock className="w-7 h-7 animate-pulse" />
-                </div>
-                <h3 className="font-serif text-2xl font-bold text-[#1A1A1A]">
-                  Booking Anda Sedang Ditinjau Admin
-                </h3>
-                <p className="text-xs sm:text-sm text-[#1A1A1A]/70 leading-relaxed max-w-lg mx-auto">
-                  Pengajuan booking paket{' '}
-                  <strong className="text-[#1A1A1A] font-semibold">{pendingBooking.package?.name}</strong>{' '}
-                  untuk tanggal{' '}
-                  <strong className="text-[#1A1A1A] font-semibold">{formatDateIndo(pendingBooking.wedding_date)}</strong>{' '}
-                  sedang dalam proses review.{' '}
-                  Checklist tugas persiapan pernikahan dan wedding countdown akan otomatis aktif segera setelah Admin menyetujui reservasi Anda.
-                </p>
-                <div className="pt-2">
-                  <Link
-                    href="/customer/booking"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#C8A46A] hover:bg-[#b59157] text-white text-xs font-semibold shadow-xs transition"
-                  >
-                    <span>Cek Rincian Booking</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
+        {/* 1. SKELETON LOADER (While fetching initial data) */}
+        {isLoading && !hasActiveConfirmedProject && !pendingBooking ? (
+          <div className="space-y-6 animate-pulse">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="bg-white rounded-3xl p-6 h-56 border border-[#E8E2D8] flex flex-col justify-between">
+                <div className="h-4 bg-gray-200 rounded-md w-1/3"></div>
+                <div className="h-8 bg-gray-200 rounded-md w-3/4"></div>
+                <div className="h-4 bg-gray-200 rounded-md w-1/2"></div>
+              </div>
+              <div className="lg:col-span-2 bg-[#1A1A1A] rounded-3xl p-6 sm:p-8 h-56 flex flex-col justify-between">
+                <div className="h-4 bg-white/20 rounded-md w-1/4"></div>
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="h-16 bg-white/10 rounded-2xl"></div>
+                  <div className="h-16 bg-white/10 rounded-2xl"></div>
+                  <div className="h-16 bg-white/10 rounded-2xl"></div>
+                  <div className="h-16 bg-white/10 rounded-2xl"></div>
                 </div>
               </div>
-            ) : (
-              <EmptyState
-                icon={ListTodo}
-                title="Belum ada data tersedia"
-                description="Checklist persiapan pernikahan dan wedding countdown akan otomatis diaktifkan setelah Anda membuat pengajuan booking dan dikonfirmasi oleh tim Wedding Organizer."
-                actionLabel="Ajukan Booking Sekarang"
-                actionHref="/customer/booking"
-              />
-            )}
+            </div>
+            <div className="bg-white rounded-3xl p-6 h-64 border border-[#E8E2D8]">
+              <div className="h-6 bg-gray-200 rounded-md w-1/4 mb-4"></div>
+              <div className="space-y-3">
+                <div className="h-12 bg-gray-100 rounded-xl"></div>
+                <div className="h-12 bg-gray-100 rounded-xl"></div>
+                <div className="h-12 bg-gray-100 rounded-xl"></div>
+              </div>
+            </div>
           </div>
-        ) : (
-          /* CASE 2: PROJECT ACTIVE WITH COUNTDOWN & CHECKLIST */
+        ) : hasActiveConfirmedProject ? (
+          /* 2. CASE CONFIRMED: ACTIVE WEDDING PROJECT WITH COUNTDOWN & CHECKLIST */
           <div className="space-y-8">
+            {pendingBooking && (
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-amber-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-2.5">
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    Catatan: Anda juga memiliki pengajuan reservasi lain (tanggal {formatDateIndo(pendingBooking.wedding_date)}) yang saat ini sedang dalam proses review oleh Admin.
+                  </span>
+                </div>
+                <Link
+                  href="/customer/booking"
+                  className="text-amber-800 font-semibold underline hover:text-amber-950 shrink-0"
+                >
+                  Lihat Riwayat Booking &rarr;
+                </Link>
+              </div>
+            )}
+
             {/* BOOKING STATUS & COUNTDOWN HERO */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Col 1: Booking Status Summary */}
@@ -258,11 +341,11 @@ export default function CustomerChecklistPage() {
 
                   <div className="mt-3 space-y-1">
                     <h3 className="font-serif text-2xl font-bold text-[#1A1A1A]">
-                      {project.title}
+                      {activeTitle || 'Pernikahan Pengantin'}
                     </h3>
                     <div className="text-xs text-[#C8A46A] font-semibold flex items-center gap-1.5 pt-1">
                       <Calendar className="w-4 h-4" />
-                      <span>{formatDateIndo(project.wedding_date)}</span>
+                      <span>{formatDateIndo(activeWeddingDate)}</span>
                     </div>
                   </div>
 
@@ -300,7 +383,7 @@ export default function CustomerChecklistPage() {
                       Wedding Countdown
                     </span>
                     <span className="text-xs text-white/60">
-                      Hari H: {formatDateIndo(project.wedding_date)}
+                      Hari H: {formatDateIndo(activeWeddingDate)}
                     </span>
                   </div>
 
@@ -467,11 +550,11 @@ export default function CustomerChecklistPage() {
               {filteredTasks.length === 0 ? (
                 <EmptyState
                   icon={ListTodo}
-                  title="Belum ada data tersedia"
+                  title={tasks.length === 0 ? 'Menyiapkan Checklist Acara' : 'Belum ada data tersedia'}
                   description={
                     searchQuery || selectedCategory !== 'ALL' || selectedStatus !== 'ALL'
                       ? 'Tidak ada checklist yang cocok dengan filter yang dipilih.'
-                      : 'Tim WO sedang menyiapkan rincian checklist persiapan untuk acara Anda.'
+                      : 'Tim WO sedang menyiapkan rincian tugas persiapan sesuai paket yang Anda pilih.'
                   }
                   actionLabel={
                     searchQuery || selectedCategory !== 'ALL' || selectedStatus !== 'ALL'
@@ -562,6 +645,42 @@ export default function CustomerChecklistPage() {
               )}
             </div>
           </div>
+        ) : pendingBooking ? (
+          /* 3. CASE PENDING ONLY: Displayed strictly when client has NO confirmed bookings */
+          <div className="bg-white rounded-3xl p-8 border border-[#E8E2D8] shadow-xs text-center max-w-2xl mx-auto space-y-4">
+            <div className="w-14 h-14 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+              <Clock className="w-7 h-7 animate-pulse" />
+            </div>
+            <h3 className="font-serif text-2xl font-bold text-[#1A1A1A]">
+              Booking Anda Sedang Ditinjau Admin
+            </h3>
+            <p className="text-xs sm:text-sm text-[#1A1A1A]/70 leading-relaxed max-w-lg mx-auto">
+              Pengajuan booking paket{' '}
+              <strong className="text-[#1A1A1A] font-semibold">{pendingBooking.package?.name || 'Wedding'}</strong>{' '}
+              untuk tanggal{' '}
+              <strong className="text-[#1A1A1A] font-semibold">{formatDateIndo(pendingBooking.wedding_date)}</strong>{' '}
+              sedang dalam proses review.{' '}
+              Checklist tugas persiapan pernikahan dan wedding countdown akan otomatis aktif segera setelah Admin menyetujui reservasi Anda.
+            </p>
+            <div className="pt-2">
+              <Link
+                href="/customer/booking"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#C8A46A] hover:bg-[#b59157] text-white text-xs font-semibold shadow-xs transition"
+              >
+                <span>Cek Rincian Booking</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </div>
+        ) : (
+          /* 4. CASE EMPTY: NO BOOKINGS */
+          <EmptyState
+            icon={ListTodo}
+            title="Belum ada data tersedia"
+            description="Checklist persiapan pernikahan dan wedding countdown akan otomatis diaktifkan setelah Anda membuat pengajuan booking dan dikonfirmasi oleh tim Wedding Organizer."
+            actionLabel="Ajukan Booking Sekarang"
+            actionHref="/customer/booking"
+          />
         )}
       </div>
     </div>

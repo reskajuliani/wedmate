@@ -3,6 +3,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { demoStore } from '@/lib/demo-store';
 import { Booking, BookingStatus } from '@/lib/types';
+import { ensureProjectAndTasksForBooking, cleanupProjectForBooking } from '@/lib/task-generator';
 
 export const dynamic = 'force-dynamic';
 
@@ -244,85 +245,11 @@ export async function PATCH(request: NextRequest) {
           console.warn('PATCH /api/bookings Supabase update error:', error.message);
         }
 
-        // If status becomes CONFIRMED, create/ensure invoice in payments and project in wedding_projects
+        // Trigger project & tasks auto-generation or cleanup strictly on Admin Action
         if (status === 'CONFIRMED' && updated) {
-          // 1. Ensure Payment invoice
-          const { data: existingPayment } = await supabase
-            .from('payments')
-            .select('id')
-            .eq('booking_id', updated.id)
-            .maybeSingle();
-
-          if (!existingPayment) {
-            const invoiceNum = `INV/${new Date().getFullYear()}/WM-${Math.floor(1000 + Math.random() * 9000)}`;
-            const totalAmt = Number(updated.total_price) || (updated.package ? Number(updated.package.price) : 0);
-
-            await supabase.from('payments').insert({
-              id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'm' + Date.now(),
-              booking_id: updated.id,
-              customer_id: updated.customer_id,
-              invoice_number: invoiceNum,
-              total_amount: totalAmt,
-              amount_paid: 0,
-              remaining_balance: totalAmt,
-              status: 'UNPAID',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
-          }
-
-          // 2. Ensure Project & Tasks
-          const { data: existingProj } = await supabase
-            .from('wedding_projects')
-            .select('id')
-            .eq('booking_id', updated.id)
-            .maybeSingle();
-
-          if (!existingProj) {
-            const custName = updated.customer?.full_name || 'Klien Pengantin';
-            const projId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'w' + Date.now();
-            const { data: newProj } = await supabase
-              .from('wedding_projects')
-              .insert({
-                id: projId,
-                booking_id: updated.id,
-                customer_id: updated.customer_id,
-                title: `Pernikahan ${custName}`,
-                wedding_date: updated.wedding_date,
-                progress_percent: 0,
-                notes: `Proyek pernikahan ${custName} di ${updated.venue_name}`,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              })
-              .select('id')
-              .maybeSingle();
-
-            if (newProj) {
-              const tasksToInsert = [
-                { title: 'Konfirmasi Gedung & Fasilitas Venue Pernikahan', description: `Detail lokasi: ${updated.venue_address}`, category: 'Venue', sort_order: 1 },
-                { title: `Food Tasting & Finalisasi Menu Katering (${updated.guest_count} Tamu)`, description: 'Memilih menu prasmanan utama, stall dessert, dan flow katering.', category: 'Catering', sort_order: 2 },
-                { title: 'Fitting Busana Pengantin & Keluarga Inti', description: 'Pengukuran kebaya/beskap akad serta gaun resepsi.', category: 'Attire', sort_order: 3 },
-                { title: 'Konsep Desain Dekorasi Pelaminan & Floral', description: 'Penataan lorong masuk, photobooth, dan panggung pelaminan.', category: 'Decoration', sort_order: 4 },
-                { title: 'Briefing Tim Dokumentasi Foto & Video Sinematik', description: 'Penyusunan shot-list momen sakral akad dan resepsi.', category: 'Documentation', sort_order: 5 },
-                { title: 'Distribusi Undangan Digital & Koordinasi RSVP Tamu', description: 'Verifikasi ejaan nama tamu VIP dan sistem buku tamu.', category: 'Invitation', sort_order: 6 },
-                { title: 'Kurasi MC & Pengisi Musik Entertainment Resepsi', description: 'Pemilihan MC profesional dan daftar lagu wedding.', category: 'Entertainment', sort_order: 7 },
-                { title: 'Verifikasi Berkas KUA / Catatan Sipil & Kelengkapan Saksi', description: 'Pemeriksaan surat pengantar nikah dan saksi akad.', category: 'Legal', sort_order: 8 },
-              ].map((t) => ({
-                id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 't' + Math.random().toString(36).slice(2, 9),
-                project_id: newProj.id,
-                title: t.title,
-                description: t.description,
-                category: t.category,
-                status: 'TODO',
-                due_date: updated.wedding_date,
-                sort_order: t.sort_order,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              }));
-
-              await supabase.from('wedding_tasks').insert(tasksToInsert);
-            }
-          }
+          await ensureProjectAndTasksForBooking(supabase, updated);
+        } else if (status === 'CANCELLED' || status === 'REJECTED') {
+          await cleanupProjectForBooking(supabase, id);
         }
       } catch (err: any) {
         console.warn('PATCH /api/bookings exception:', err.message);

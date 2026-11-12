@@ -67,6 +67,9 @@ export default function CustomerPaymentPage() {
 
   useEffect(() => {
     let isMounted = true;
+    let pollTimer: NodeJS.Timeout | null = null;
+    let isFetching = false;
+
     const refreshData = async () => {
       if (!customerId) return;
       try {
@@ -89,13 +92,39 @@ export default function CustomerPaymentPage() {
       }
     };
 
-    refreshData();
-    const unsub = demoStore.subscribe(refreshData);
-    const interval = setInterval(refreshData, 3000);
+    const executeSmartPoll = async () => {
+      if (!isMounted || !customerId) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (isFetching) return;
+
+      isFetching = true;
+      try {
+        await refreshData();
+      } finally {
+        isFetching = false;
+        if (isMounted) {
+          pollTimer = setTimeout(executeSmartPoll, 3000);
+        }
+      }
+    };
+
+    executeSmartPoll();
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden && isMounted && !isFetching) {
+        if (pollTimer) clearTimeout(pollTimer);
+        executeSmartPoll();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const unsub = demoStore.subscribe(executeSmartPoll);
+
     return () => {
       isMounted = false;
+      if (pollTimer) clearTimeout(pollTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsub();
-      clearInterval(interval);
     };
   }, [customerId, selectedPaymentId]);
 

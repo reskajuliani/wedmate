@@ -69,25 +69,58 @@ export default function AdminProjectsPage() {
   const [formError, setFormError] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
 
-  // Subscribe to demo store
+  // Subscribe to store with Smart Polling
   useEffect(() => {
     let isMounted = true;
+    let pollTimer: NodeJS.Timeout | null = null;
+    let isFetching = false;
+
     const refreshData = async () => {
-      const all = await supabaseService.getProjects();
-      if (!isMounted) return;
-      setProjects(all);
-      if (all.length > 0 && !expandedProjectId) {
-        setExpandedProjectId(all[0].id);
+      try {
+        const all = await supabaseService.getProjects();
+        if (!isMounted) return;
+        setProjects(all);
+        if (all.length > 0 && !expandedProjectId) {
+          setExpandedProjectId(all[0].id);
+        }
+      } catch (err) {
+        console.warn('Refresh projects error:', err);
       }
     };
 
-    refreshData();
-    const unsub = demoStore.subscribe(refreshData);
-    const interval = setInterval(refreshData, 3000);
+    const executeSmartPoll = async () => {
+      if (!isMounted) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (isFetching) return;
+
+      isFetching = true;
+      try {
+        await refreshData();
+      } finally {
+        isFetching = false;
+        if (isMounted) {
+          pollTimer = setTimeout(executeSmartPoll, 3000);
+        }
+      }
+    };
+
+    executeSmartPoll();
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden && isMounted && !isFetching) {
+        if (pollTimer) clearTimeout(pollTimer);
+        executeSmartPoll();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const unsub = demoStore.subscribe(executeSmartPoll);
+
     return () => {
       isMounted = false;
+      if (pollTimer) clearTimeout(pollTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsub();
-      clearInterval(interval);
     };
   }, [expandedProjectId]);
 
