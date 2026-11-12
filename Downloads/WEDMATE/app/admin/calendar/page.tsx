@@ -87,7 +87,11 @@ export default function AdminCalendarPage() {
 
   const handleConfirmBooking = async (bookingId: string) => {
     try {
-      await supabaseService.updateBookingStatus(bookingId, 'CONFIRMED');
+      demoStore.confirmBooking(bookingId, user?.id);
+      await Promise.allSettled([
+        supabaseService.updateBookingStatus(bookingId, 'CONFIRMED'),
+        supabaseService.restoreProject(bookingId),
+      ]);
       showToast('Booking berhasil dikonfirmasi! Proyek & invoice tagihan otomatis diterbitkan.');
       await loadData();
     } catch (err: any) {
@@ -97,7 +101,9 @@ export default function AdminCalendarPage() {
 
   const handleCancelBooking = async (bookingId: string) => {
     try {
-      await supabaseService.updateBookingStatus(bookingId, 'CANCELLED', 'Dibatalkan dari kalender jadwal oleh admin.');
+      const reason = 'Dibatalkan dari kalender jadwal oleh admin.';
+      demoStore.cancelBooking(bookingId, reason);
+      await supabaseService.updateBookingStatus(bookingId, 'CANCELLED', reason);
       showToast('Booking berhasil dibatalkan.', 'success');
       await loadData();
     } catch (err: any) {
