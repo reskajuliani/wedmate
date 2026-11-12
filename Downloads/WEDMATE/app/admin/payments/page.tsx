@@ -58,6 +58,9 @@ export default function AdminPaymentVerificationPage() {
   // Subscribe to demo store and fetch from supabaseService with 3s auto-polling
   useEffect(() => {
     let isMounted = true;
+    let pollTimer: NodeJS.Timeout | null = null;
+    let isFetching = false;
+
     const refreshData = async () => {
       try {
         const txs = await supabaseService.getTransactions();
@@ -69,13 +72,39 @@ export default function AdminPaymentVerificationPage() {
       }
     };
 
-    refreshData();
-    const unsub = demoStore.subscribe(refreshData);
-    const interval = setInterval(refreshData, 3000);
+    const executeSmartPoll = async () => {
+      if (!isMounted) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (isFetching) return;
+
+      isFetching = true;
+      try {
+        await refreshData();
+      } finally {
+        isFetching = false;
+        if (isMounted) {
+          pollTimer = setTimeout(executeSmartPoll, 3000);
+        }
+      }
+    };
+
+    executeSmartPoll();
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden && isMounted && !isFetching) {
+        if (pollTimer) clearTimeout(pollTimer);
+        executeSmartPoll();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const unsub = demoStore.subscribe(executeSmartPoll);
+
     return () => {
       isMounted = false;
+      if (pollTimer) clearTimeout(pollTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsub();
-      clearInterval(interval);
     };
   }, []);
 

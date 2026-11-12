@@ -154,10 +154,20 @@ export const supabaseService = {
     // 1. Fetch from server API first (bypasses RLS)
     if (typeof window !== 'undefined') {
       try {
-        const res = await fetch('/api/bookings' + (customerId ? `?customerId=${customerId}` : ''));
+        const res = await fetch('/api/bookings' + (customerId ? `?customerId=${customerId}` : ''), {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
         if (res.ok) {
           const json = await res.json();
           if (Array.isArray(json.bookings) && json.bookings.length > 0) {
+            // Keep local demoStore in sync with verified server statuses
+            json.bookings.forEach((serverB: Booking) => {
+              const localB = demoStore.getBookingById(serverB.id);
+              if (localB && localB.status !== serverB.status) {
+                demoStore.updateBookingStatus(serverB.id, serverB.status, serverB.notes || undefined);
+              }
+            });
             return json.bookings;
           }
         }
@@ -341,7 +351,10 @@ export const supabaseService = {
     // 1. Fetch from server API first (bypasses RLS)
     if (typeof window !== 'undefined') {
       try {
-        const res = await fetch('/api/payments?type=payments' + (customerId ? `&customerId=${customerId}` : ''));
+        const res = await fetch('/api/payments?type=payments' + (customerId ? `&customerId=${customerId}` : ''), {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
         if (res.ok) {
           const json = await res.json();
           if (Array.isArray(json.payments) && json.payments.length > 0) {
@@ -387,7 +400,10 @@ export const supabaseService = {
     // 1. Fetch from server API first (bypasses RLS)
     if (typeof window !== 'undefined') {
       try {
-        const res = await fetch('/api/payments?type=transactions' + (customerId ? `&customerId=${customerId}` : ''));
+        const res = await fetch('/api/payments?type=transactions' + (customerId ? `&customerId=${customerId}` : ''), {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
         if (res.ok) {
           const json = await res.json();
           if (Array.isArray(json.transactions) && json.transactions.length > 0) {
@@ -726,7 +742,10 @@ export const supabaseService = {
     // 1. Fetch from server API first (auto-heals missing projects/tasks via Admin Client)
     if (typeof window !== 'undefined') {
       try {
-        const res = await fetch('/api/projects' + (customerId ? `?customerId=${customerId}` : ''));
+        const res = await fetch('/api/projects' + (customerId ? `?customerId=${customerId}` : ''), {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
         if (res.ok) {
           const json = await res.json();
           if (Array.isArray(json.projects)) {
