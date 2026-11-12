@@ -464,7 +464,6 @@ export const supabaseService = {
             proof_url: data.proof_url,
             notes: data.notes,
           }),
-          keepalive: true,
         });
       } catch (err) {
         console.warn('Sync /api/payments error:', err);
@@ -513,7 +512,6 @@ export const supabaseService = {
             adminId,
             rejectionReason,
           }),
-          keepalive: true,
         });
       } catch (err) {
         console.warn('Sync /api/payments PATCH error:', err);
@@ -725,6 +723,21 @@ export const supabaseService = {
   // PROJECTS & TASKS (wedding_projects, wedding_tasks)
   // -------------------------------------------------------------
   async getProjects(customerId?: string): Promise<WeddingProject[]> {
+    // 1. Fetch from server API first (auto-heals missing projects/tasks via Admin Client)
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/projects' + (customerId ? `?customerId=${customerId}` : ''));
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.projects)) {
+            return json.projects;
+          }
+        }
+      } catch (err) {
+        console.warn('Fetch /api/projects error:', err);
+      }
+    }
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();
@@ -775,6 +788,20 @@ export const supabaseService = {
 
   async updateTaskStatus(taskId: string, status: TaskStatus): Promise<WeddingTask> {
     const updated = demoStore.updateTaskStatus(taskId, status);
+
+    // Sync to Server API Registry (uses Admin Client)
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/projects', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId, status }),
+        });
+      } catch (err) {
+        console.warn('Sync /api/projects PATCH error:', err);
+      }
+    }
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createClient();

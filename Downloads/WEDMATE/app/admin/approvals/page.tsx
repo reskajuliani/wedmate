@@ -166,10 +166,13 @@ function AdminApprovalsContent() {
     const booking = typeof target === 'string' ? bookings.find((b) => b.id === target) : target;
     if (!booking) return;
     try {
+      setBookings((prev) =>
+        prev.map((b) => (b.id === booking.id ? { ...b, status: 'CONFIRMED' } : b))
+      );
       demoStore.confirmBooking(booking.id, adminId);
       await supabaseService.updateBookingStatus(booking.id, 'CONFIRMED');
       showToast(
-        `Booking ${booking.id} berhasil DIKONFIRMASI! Proyek checklist dan invoice pembayaran otomatis diterbitkan.`
+        `Booking ${booking.id} berhasil DIKONFIRMASI! Proyek checklist dan invoice tagihan otomatis diterbitkan ke portal klien.`
       );
     } catch (err: any) {
       showToast(err.message || 'Gagal mengonfirmasi booking.', 'error');
@@ -189,9 +192,13 @@ function AdminApprovalsContent() {
 
   const handleConfirmCancelBooking = async () => {
     if (!cancelBookingTarget) return;
-    demoStore.cancelBooking(cancelBookingTarget.id, cancelBookingReason.trim());
-    await supabaseService.updateBookingStatus(cancelBookingTarget.id, 'CANCELLED', cancelBookingReason.trim());
-    showToast(`Pengajuan booking ${cancelBookingTarget.id} berhasil DIBATALKAN.`);
+    const reason = cancelBookingReason.trim() || 'Jadwal bentrok atau kuota layanan pada tanggal tersebut penuh.';
+    setBookings((prev) =>
+      prev.map((b) => (b.id === cancelBookingTarget.id ? { ...b, status: 'CANCELLED', notes: reason } : b))
+    );
+    demoStore.cancelBooking(cancelBookingTarget.id, reason);
+    await supabaseService.updateBookingStatus(cancelBookingTarget.id, 'CANCELLED', reason);
+    showToast(`Pengajuan booking ${cancelBookingTarget.id} berhasil DIBATALKAN. Alasan penolakan telah diteruskan ke portal klien.`);
     setCancelBookingTarget(null);
   };
 

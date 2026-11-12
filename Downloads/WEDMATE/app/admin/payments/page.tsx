@@ -55,18 +55,28 @@ export default function AdminPaymentVerificationPage() {
     message: string;
   } | null>(null);
 
-  // Subscribe to demo store and fetch from supabaseService
+  // Subscribe to demo store and fetch from supabaseService with 3s auto-polling
   useEffect(() => {
+    let isMounted = true;
     const refreshData = async () => {
-      const txs = await supabaseService.getTransactions();
-      setAllTransactions(txs);
-      const pmts = await supabaseService.getPayments();
-      setAllPayments(pmts);
+      try {
+        const txs = await supabaseService.getTransactions();
+        if (isMounted) setAllTransactions(txs);
+        const pmts = await supabaseService.getPayments();
+        if (isMounted) setAllPayments(pmts);
+      } catch (e) {
+        console.warn('Error loading payments in admin:', e);
+      }
     };
 
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
-    return unsub;
+    const interval = setInterval(refreshData, 3000);
+    return () => {
+      isMounted = false;
+      unsub();
+      clearInterval(interval);
+    };
   }, []);
 
   // Pre-filter calculations

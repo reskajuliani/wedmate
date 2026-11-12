@@ -66,27 +66,37 @@ export default function CustomerPaymentPage() {
   };
 
   useEffect(() => {
+    let isMounted = true;
     const refreshData = async () => {
       if (!customerId) return;
-      const userPayments = await supabaseService.getPayments(customerId);
-      setPayments(userPayments);
+      try {
+        const userPayments = await supabaseService.getPayments(customerId);
+        if (isMounted) setPayments(userPayments);
 
-      const userTxs = await supabaseService.getTransactions(customerId);
-      setTransactions(userTxs);
+        const userTxs = await supabaseService.getTransactions(customerId);
+        if (isMounted) setTransactions(userTxs);
 
-      if (userPayments.length > 0 && !selectedPaymentId) {
-        setSelectedPaymentId(userPayments[0].id);
-        setAmountInput(
-          userPayments[0].remaining_balance > 0
-            ? userPayments[0].remaining_balance.toString()
-            : userPayments[0].total_amount.toString()
-        );
+        if (userPayments.length > 0 && !selectedPaymentId) {
+          setSelectedPaymentId(userPayments[0].id);
+          setAmountInput(
+            userPayments[0].remaining_balance > 0
+              ? userPayments[0].remaining_balance.toString()
+              : userPayments[0].total_amount.toString()
+          );
+        }
+      } catch (e) {
+        console.warn('Refresh error in customer payments:', e);
       }
     };
 
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
-    return unsub;
+    const interval = setInterval(refreshData, 3000);
+    return () => {
+      isMounted = false;
+      unsub();
+      clearInterval(interval);
+    };
   }, [customerId, selectedPaymentId]);
 
   const copyToClipboard = (text: string, label: string) => {
@@ -120,8 +130,35 @@ export default function CustomerPaymentPage() {
 
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
-      reader.onload = () => {
-        setProofPreview(reader.result as string);
+      reader.onload = (event) => {
+        if (typeof window === 'undefined') return;
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.65);
+            setProofPreview(compressed);
+          } else {
+            setProofPreview(event.target?.result as string);
+          }
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     } else {

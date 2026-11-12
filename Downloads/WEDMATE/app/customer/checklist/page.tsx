@@ -144,9 +144,11 @@ export default function CustomerChecklistPage() {
 
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
+    const interval = setInterval(refreshData, 3000);
     return () => {
       isMounted = false;
       unsub();
+      clearInterval(interval);
     };
   }, [customerId]);
 

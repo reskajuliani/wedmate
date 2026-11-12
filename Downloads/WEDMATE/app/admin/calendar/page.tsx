@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { demoStore } from '@/lib/demo-store';
+import { supabaseService } from '@/lib/supabase-service';
 import { Booking } from '@/lib/types';
 import { EventScheduleCalendar } from '@/components/admin/EventScheduleCalendar';
 import {
@@ -13,41 +14,61 @@ import {
   ListTodo,
   CheckCircle2,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function AdminCalendarPage() {
   const { user } = useAuth();
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>(() => demoStore.getBookings());
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  useEffect(() => {
-    const refreshData = () => {
-      setBookings(demoStore.getBookings());
-    };
+  const loadData = async () => {
+    try {
+      const data = await supabaseService.getBookings();
+      setBookings(data);
+    } catch (e) {
+      console.warn('Error loading bookings for calendar:', e);
+    }
+  };
 
-    refreshData();
-    const unsub = demoStore.subscribe(refreshData);
-    return unsub;
+  useEffect(() => {
+    loadData();
+    const unsub = demoStore.subscribe(loadData);
+    const interval = setInterval(loadData, 3000);
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
   }, []);
 
-  const handleConfirmBooking = (bookingId: string) => {
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await loadData();
+    setIsRefreshing(false);
+    showToast('Jadwal kalender berhasil diperbarui!');
+  };
+
+  const handleConfirmBooking = async (bookingId: string) => {
     try {
-      demoStore.updateBookingStatus(bookingId, 'CONFIRMED');
+      await supabaseService.updateBookingStatus(bookingId, 'CONFIRMED');
       showToast('Booking berhasil dikonfirmasi! Proyek & invoice tagihan otomatis diterbitkan.');
+      await loadData();
     } catch (err: any) {
       showToast(err.message || 'Gagal mengonfirmasi booking.', 'error');
     }
   };
 
-  const handleCancelBooking = (bookingId: string) => {
+  const handleCancelBooking = async (bookingId: string) => {
     try {
-      demoStore.updateBookingStatus(bookingId, 'CANCELLED', 'Dibatalkan dari kalender jadwal oleh admin.');
+      await supabaseService.updateBookingStatus(bookingId, 'CANCELLED', 'Dibatalkan dari kalender jadwal oleh admin.');
       showToast('Booking berhasil dibatalkan.', 'success');
+      await loadData();
     } catch (err: any) {
       showToast(err.message || 'Gagal membatalkan booking.', 'error');
     }

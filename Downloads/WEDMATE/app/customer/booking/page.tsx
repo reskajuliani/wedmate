@@ -65,31 +65,41 @@ function CustomerBookingContent() {
   };
 
   useEffect(() => {
+    let isMounted = true;
     const refreshData = async () => {
-      const activePkgs = await supabaseService.getPackages(true);
-      setPackages(activePkgs);
+      try {
+        const activePkgs = await supabaseService.getPackages(true);
+        if (isMounted) setPackages(activePkgs);
 
-      if (customerId) {
-        const userBookings = await supabaseService.getBookings(customerId);
-        setBookings(userBookings);
-      }
-
-      // Pre-select package from URL param or default first
-      if (packageParam && activePkgs.length > 0) {
-        const found = activePkgs.find((p) => p.id === packageParam || p.slug === packageParam);
-        if (found) {
-          setSelectedPackageId(found.id);
-          setGuestCount(found.estimated_guests);
+        if (customerId) {
+          const userBookings = await supabaseService.getBookings(customerId);
+          if (isMounted) setBookings(userBookings);
         }
-      } else if (activePkgs.length > 0 && !selectedPackageId) {
-        setSelectedPackageId(activePkgs[0].id);
-        setGuestCount(activePkgs[0].estimated_guests);
+
+        // Pre-select package from URL param or default first
+        if (packageParam && activePkgs.length > 0) {
+          const found = activePkgs.find((p) => p.id === packageParam || p.slug === packageParam);
+          if (found && isMounted) {
+            setSelectedPackageId(found.id);
+            setGuestCount(found.estimated_guests);
+          }
+        } else if (activePkgs.length > 0 && !selectedPackageId && isMounted) {
+          setSelectedPackageId(activePkgs[0].id);
+          setGuestCount(activePkgs[0].estimated_guests);
+        }
+      } catch (e) {
+        console.warn('Error refreshing customer bookings:', e);
       }
     };
 
     refreshData();
     const unsub = demoStore.subscribe(refreshData);
-    return unsub;
+    const interval = setInterval(refreshData, 3000);
+    return () => {
+      isMounted = false;
+      unsub();
+      clearInterval(interval);
+    };
   }, [customerId, packageParam, selectedPackageId]);
 
   // Set default future date (6 months ahead)
@@ -733,40 +743,112 @@ function CustomerBookingContent() {
                       </div>
                     </div>
 
-                    {/* Col 3: Actions & Next Steps */}
-                    <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8E2D8] flex flex-col justify-between">
-                      <div className="text-xs text-gray-600 mb-3">
-                        {booking.status === 'CONFIRMED' ? (
-                          <span className="text-emerald-800 font-medium">
-                            Selamat! Reservasi Anda sudah disetujui. Silakan cek checklist persiapan atau lakukan pembayaran tagihan.
-                          </span>
-                        ) : booking.status === 'PENDING' ? (
-                          <span className="text-amber-800 font-medium">
-                            Tim WO sedang meninjau ketersediaan slot tanggal Anda. Estimasi konfirmasi: 1x24 jam kerja.
-                          </span>
-                        ) : (
-                          <span>{booking.notes || 'Pengajuan tidak aktif.'}</span>
+                    {/* Col 3: Actions & Real-Time Notification */}
+                    <div
+                      className={`p-4 sm:p-5 rounded-2xl border flex flex-col justify-between gap-3 ${
+                        booking.status === 'CONFIRMED'
+                          ? 'bg-emerald-50/50 border-emerald-200'
+                          : booking.status === 'CANCELLED'
+                          ? 'bg-red-50/60 border-red-200'
+                          : 'bg-amber-50/50 border-amber-200'
+                      }`}
+                    >
+                      <div>
+                        {booking.status === 'CONFIRMED' && (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Reservasi Dikonfirmasi
+                            </span>
+                            <p className="text-xs text-emerald-950 font-medium leading-relaxed">
+                              Selamat! Reservasi paket pernikahan Anda telah disetujui. Tim Wedding Organizer kami telah mengaktifkan checklist persiapan pernikahan dan invoice pembayaran Anda.
+                            </p>
+                          </div>
+                        )}
+
+                        {booking.status === 'PENDING' && (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                              Sedang Ditinjau Admin
+                            </span>
+                            <p className="text-xs text-amber-950 leading-relaxed">
+                              Pengajuan tanggal dan venue Anda sedang diverifikasi oleh tim operasional WEDMATE. Estimasi konfirmasi: 1x24 jam kerja.
+                            </p>
+                          </div>
+                        )}
+
+                        {booking.status === 'CANCELLED' && (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-1.5 text-red-800 font-bold text-xs uppercase tracking-wide">
+                              <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                              <span>Pengajuan Ditolak / Dibatalkan</span>
+                            </div>
+                            <p className="text-xs text-red-900 leading-relaxed">
+                              Mohon maaf, pengajuan reservasi tanggal acara ini belum dapat dikonfirmasi oleh Admin.
+                            </p>
+                            <div className="p-2.5 rounded-xl bg-white border border-red-200 text-xs text-red-950">
+                              <span className="font-bold block text-[10px] uppercase text-red-700 tracking-wider mb-0.5">
+                                Catatan / Alasan dari Admin:
+                              </span>
+                              <span className="italic">
+                                &quot;{booking.notes || 'Jadwal bentrok atau kuota layanan pada tanggal tersebut telah penuh.'}&quot;
+                              </span>
+                            </div>
+                          </div>
                         )}
                       </div>
 
-                      {booking.status === 'CONFIRMED' && (
-                        <div className="flex items-center gap-2 pt-2 border-t border-[#E8E2D8]">
-                          <Link
-                            href="/customer/checklist"
-                            className="flex-1 py-2 px-3 rounded-xl bg-[#C8A46A] hover:bg-[#b59157] text-white font-semibold text-xs transition text-center flex items-center justify-center gap-1.5"
-                          >
-                            <ListTodo className="w-3.5 h-3.5" />
-                            <span>Checklist WO</span>
-                          </Link>
-                          <Link
-                            href="/customer/payment"
-                            className="flex-1 py-2 px-3 rounded-xl bg-white border border-[#E8E2D8] hover:bg-[#FAF8F5] text-[#1A1A1A] font-semibold text-xs transition text-center flex items-center justify-center gap-1.5"
-                          >
-                            <CreditCard className="w-3.5 h-3.5" />
-                            <span>Pembayaran</span>
-                          </Link>
-                        </div>
-                      )}
+                      {/* Action Buttons based on Status */}
+                      <div className="pt-2 border-t border-black/10">
+                        {booking.status === 'CONFIRMED' && (
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href="/customer/checklist"
+                              className="flex-1 py-2 px-3 rounded-xl bg-[#C8A46A] hover:bg-[#b59157] text-white font-semibold text-xs transition text-center flex items-center justify-center gap-1.5 shadow-xs"
+                            >
+                              <ListTodo className="w-3.5 h-3.5" />
+                              <span>Checklist WO</span>
+                            </Link>
+                            <Link
+                              href="/customer/payment"
+                              className="flex-1 py-2 px-3 rounded-xl bg-white border border-[#E8E2D8] hover:bg-[#FAF8F5] text-[#1A1A1A] font-semibold text-xs transition text-center flex items-center justify-center gap-1.5 shadow-xs"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" />
+                              <span>Pembayaran</span>
+                            </Link>
+                          </div>
+                        )}
+
+                        {booking.status === 'CANCELLED' && (
+                          <div className="flex flex-col sm:flex-row items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => formRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                              className="w-full sm:flex-1 py-2 px-3 rounded-xl bg-[#1A1A1A] hover:bg-black text-white font-semibold text-xs transition text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              <Calendar className="w-3.5 h-3.5 text-[#C8A46A]" />
+                              <span>Ajukan Jadwal Lain</span>
+                            </button>
+                            <a
+                              href={`https://wa.me/6285551124373?text=${encodeURIComponent(
+                                `Halo Admin WEDMATE, saya ingin konsultasi mengenai booking saya (ID: ${booking.id}) yang dibatalkan.`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full sm:flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition text-center flex items-center justify-center gap-1.5 shadow-xs"
+                            >
+                              <span>Chat WhatsApp</span>
+                            </a>
+                          </div>
+                        )}
+
+                        {booking.status === 'PENDING' && (
+                          <div className="text-[11px] text-amber-800 text-center font-medium">
+                            Status akan otomatis terupdate saat admin melakukan verifikasi.
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

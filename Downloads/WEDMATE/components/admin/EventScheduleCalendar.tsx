@@ -65,6 +65,37 @@ export function EventScheduleCalendar({
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [activeBookingDetail, setActiveBookingDetail] = useState<Booking | null>(null);
+  const [hasAutoJumped, setHasAutoJumped] = useState(false);
+
+  // Auto-jump to earliest booking month if current month has 0 bookings
+  React.useEffect(() => {
+    if (hasAutoJumped || bookings.length === 0) return;
+    const currentMonthHasBookings = bookings.some((b) => {
+      if (!b.wedding_date) return false;
+      const parts = b.wedding_date.split('T')[0].split('-');
+      return parseInt(parts[0], 10) === today.getFullYear() && parseInt(parts[1], 10) - 1 === today.getMonth();
+    });
+    if (!currentMonthHasBookings) {
+      const sorted = [...bookings]
+        .filter((b) => b.wedding_date)
+        .sort((a, b) => new Date(a.wedding_date).getTime() - new Date(b.wedding_date).getTime());
+      if (sorted.length > 0) {
+        const target = new Date(sorted[0].wedding_date);
+        setCurrentDate(target);
+        setHasAutoJumped(true);
+      }
+    }
+  }, [bookings, hasAutoJumped]);
+
+  const jumpToDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      setCurrentDate(d);
+      setSelectedDate(dateStr.split('T')[0]);
+      const found = bookings.find((b) => b.wedding_date && b.wedding_date.startsWith(dateStr.split('T')[0]));
+      if (found) setActiveBookingDetail(found);
+    }
+  };
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -315,6 +346,44 @@ export function EventScheduleCalendar({
           </span>
         </div>
       </div>
+
+      {/* Quick Jump Bar for all booked events */}
+      {bookings.length > 0 && (
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-[#E8E2D8] shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <span className="text-xs uppercase font-bold text-[#C8A46A] tracking-wider flex items-center gap-1.5">
+              <CalendarDays className="w-3.5 h-3.5" />
+              Lompat Cepat ke Tanggal Acara ({bookings.length} Reservasi Terdaftar)
+            </span>
+            <span className="text-[11px] text-gray-400">Klik untuk langsung membuka bulan &amp; tanggal acara</span>
+          </div>
+          <div className="flex items-center gap-2.5 overflow-x-auto pb-1 no-scrollbar">
+            {bookings
+              .filter((b) => b.wedding_date)
+              .sort((a, b) => new Date(a.wedding_date).getTime() - new Date(b.wedding_date).getTime())
+              .map((b) => {
+                const isPending = b.status === 'PENDING';
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => jumpToDate(b.wedding_date)}
+                    className="shrink-0 px-4 py-2.5 rounded-2xl bg-[#FAF8F5] hover:bg-[#C8A46A]/10 border border-[#E8E2D8] hover:border-[#C8A46A] text-left transition flex items-center gap-2.5 cursor-pointer text-xs group"
+                  >
+                    <span className={`w-2 h-2 rounded-full ${isPending ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+                    <div>
+                      <strong className="block text-[#1A1A1A] group-hover:text-[#C8A46A] transition">
+                        {b.customer?.full_name || 'Klien Pengantin'}
+                      </strong>
+                      <span className="text-[10px] text-gray-500">
+                        {formatDateIndo(b.wedding_date)} • {b.package?.name || 'Paket'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {/* Main Calendar Grid Container */}
       <div className="bg-white rounded-3xl border border-[#E8E2D8] overflow-hidden shadow-xs">
