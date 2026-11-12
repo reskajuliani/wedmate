@@ -98,11 +98,36 @@ export default function AdminProjectsPage() {
 
   const handleToggleTask = async (task: WeddingTask) => {
     const nextStatus: TaskStatus = task.status === 'COMPLETED' ? 'TODO' : 'COMPLETED';
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id === task.project_id) {
+          const updatedTasks = (p.tasks || []).map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t));
+          const completed = updatedTasks.filter((t) => t.status === 'COMPLETED').length;
+          const pct = updatedTasks.length > 0 ? Math.round((completed / updatedTasks.length) * 100) : 0;
+          return { ...p, tasks: updatedTasks, progress_percent: pct };
+        }
+        return p;
+      })
+    );
     await supabaseService.updateTaskStatus(task.id, nextStatus);
+    showNotification(`Tugas diperbarui ke status ${nextStatus}. Progres klien terupdate!`);
   };
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+    setProjects((prev) =>
+      prev.map((p) => {
+        const foundTask = (p.tasks || []).find((t) => t.id === taskId);
+        if (foundTask) {
+          const updatedTasks = (p.tasks || []).map((t) => (t.id === taskId ? { ...t, status: newStatus } : t));
+          const completed = updatedTasks.filter((t) => t.status === 'COMPLETED').length;
+          const pct = updatedTasks.length > 0 ? Math.round((completed / updatedTasks.length) * 100) : 0;
+          return { ...p, tasks: updatedTasks, progress_percent: pct };
+        }
+        return p;
+      })
+    );
     await supabaseService.updateTaskStatus(taskId, newStatus);
+    showNotification(`Status tugas berhasil diubah ke ${newStatus}. Progres diperbarui.`);
   };
 
   const handleDeleteTask = async (taskId: string) => {

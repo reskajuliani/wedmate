@@ -6,61 +6,120 @@ import { WeddingProject, WeddingTask, TaskStatus } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-const DEFAULT_TASK_TEMPLATES: {
-  title: string;
-  description: string;
-  category: WeddingTask['category'];
-  sort_order: number;
-}[] = [
-  {
-    title: 'Konfirmasi Gedung & Fasilitas Venue Pernikahan',
-    description: 'Verifikasi kelengkapan ruang akad, ballroom, ruang rias, dan izin keramaian.',
+function getCategoryForFeature(title: string): WeddingTask['category'] {
+  const lower = title.toLowerCase();
+  if (lower.includes('dekor') || lower.includes('bunga') || lower.includes('pelaminan') || lower.includes('floral')) return 'Decoration';
+  if (lower.includes('katering') || lower.includes('menu') || lower.includes('food') || lower.includes('prasmanan') || lower.includes('tasting') || lower.includes('stall')) return 'Catering';
+  if (lower.includes('busana') || lower.includes('kebaya') || lower.includes('beskap') || lower.includes('rias') || lower.includes('makeup') || lower.includes('fitting') || lower.includes('gaun')) return 'Attire';
+  if (lower.includes('foto') || lower.includes('video') || lower.includes('dokumentasi') || lower.includes('drone') || lower.includes('kamera') || lower.includes('cinematik') || lower.includes('cinematic')) return 'Documentation';
+  if (lower.includes('venue') || lower.includes('gedung') || lower.includes('ballroom') || lower.includes('hotel') || lower.includes('akomodasi') || lower.includes('lokasi')) return 'Venue';
+  if (lower.includes('mc') || lower.includes('musik') || lower.includes('sound') || lower.includes('lighting') || lower.includes('band') || lower.includes('entertainment') || lower.includes('akustik') || lower.includes('penyanyi')) return 'Entertainment';
+  if (lower.includes('undangan') || lower.includes('rsvp') || lower.includes('buku tamu') || lower.includes('barcode')) return 'Invitation';
+  if (lower.includes('kua') || lower.includes('legal') || lower.includes('penghulu') || lower.includes('saksi') || lower.includes('catatan sipil') || lower.includes('ijab')) return 'Legal';
+  return 'Other';
+}
+
+function buildTasksForBooking(booking: any, projectId: string): any[] {
+  const tasks: any[] = [];
+  let sortOrder = 1;
+
+  // 1. Mandatory core milestone: Venue
+  tasks.push({
+    id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 't' + Math.random().toString(36).slice(2, 9),
+    project_id: projectId,
+    title: `Konfirmasi Gedung & Fasilitas Venue: ${booking.venue_name || 'Lokasi Acara'}`,
+    description: `Alamat: ${booking.venue_address || 'Sesuai reservasi'} • Estimasi Kapasitas: ${booking.guest_count || 100} Tamu Undangan`,
     category: 'Venue',
-    sort_order: 1,
-  },
-  {
-    title: 'Food Tasting & Finalisasi Menu Katering',
-    description: 'Memilih menu prasmanan utama, stall dessert premium, dan alur flow katering.',
-    category: 'Catering',
-    sort_order: 2,
-  },
-  {
-    title: 'Fitting Busana Pengantin & Keluarga Inti',
-    description: 'Pengukuran kebaya/beskap akad serta gaun resepsi kedua mempelai dan orang tua.',
-    category: 'Attire',
-    sort_order: 3,
-  },
-  {
-    title: 'Finalisasi Konsep Dekorasi Pelaminan & Floral',
-    description: 'Penataan lorong masuk (aisle), photobooth, panggung musik, dan bunga segar.',
-    category: 'Decoration',
-    sort_order: 4,
-  },
-  {
-    title: 'Briefing Tim Dokumentasi Foto & Video Sinematik',
-    description: 'Penyusunan shot-list momen sakral, video teaser same-day edit, dan drone operator.',
-    category: 'Documentation',
-    sort_order: 5,
-  },
-  {
-    title: 'Distribusi Undangan Digital & Koordinasi RSVP Tamu',
-    description: 'Verifikasi ejaan nama tamu VIP, barcode RSVP, dan buku tamu digital.',
-    category: 'Invitation',
-    sort_order: 6,
-  },
-  {
-    title: 'Kurasi MC & Pengisi Musik Entertainment Resepsi',
-    description: 'Pemilihan MC profesional, band akustik / mini chamber, dan daftar lagu wedding.',
-    category: 'Entertainment',
-    sort_order: 7,
-  },
-  {
-    title: 'Verifikasi Berkas KUA / Catatan Sipil & Kelengkapan Saksi',
-    description: 'Pemeriksaan surat pengantar nikah, saksi akad, dan susunan meja penghulu.',
-    category: 'Legal',
-    sort_order: 8,
-  },
-];
+    status: 'TODO',
+    due_date: booking.wedding_date || undefined,
+    sort_order: sortOrder++,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+
+  // 2. Extract features from the selected package
+  let rawFeatures: string[] = [];
+  if (booking.package && booking.package.features) {
+    if (Array.isArray(booking.package.features)) {
+      rawFeatures = booking.package.features;
+    } else if (typeof booking.package.features === 'string') {
+      try {
+        rawFeatures = JSON.parse(booking.package.features);
+      } catch {
+        rawFeatures = [booking.package.features];
+      }
+    }
+  }
+
+  // Add each package feature as an actionable checklist task
+  if (rawFeatures.length > 0) {
+    for (const feature of rawFeatures) {
+      tasks.push({
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 't' + Math.random().toString(36).slice(2, 9),
+        project_id: projectId,
+        title: feature,
+        description: `Fasilitas resmi paket ${booking.package?.name || 'Wedding'}. Ceklis setelah koordinasi bersama tim vendor selesai.`,
+        category: getCategoryForFeature(feature),
+        status: 'TODO',
+        due_date: booking.wedding_date || undefined,
+        sort_order: sortOrder++,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+  }
+
+  // 3. Add core legal & coordination milestones if not already in features
+  const hasLegal = rawFeatures.some((f) => f.toLowerCase().includes('kua') || f.toLowerCase().includes('legal'));
+  if (!hasLegal) {
+    tasks.push({
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 't' + Math.random().toString(36).slice(2, 9),
+      project_id: projectId,
+      title: 'Verifikasi Berkas KUA / Catatan Sipil & Kelengkapan Saksi',
+      description: 'Pemeriksaan surat pengantar nikah, saksi akad nikah, dan susunan meja penghulu.',
+      category: 'Legal',
+      status: 'TODO',
+      due_date: booking.wedding_date || undefined,
+      sort_order: sortOrder++,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  const hasRSVP = rawFeatures.some((f) => f.toLowerCase().includes('undangan') || f.toLowerCase().includes('rsvp'));
+  if (!hasRSVP) {
+    tasks.push({
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 't' + Math.random().toString(36).slice(2, 9),
+      project_id: projectId,
+      title: 'Distribusi Undangan Digital & Koordinasi Barcode RSVP Tamu',
+      description: 'Verifikasi ejaan nama keluarga/tamu VIP dan pengaturan sistem buku tamu digital.',
+      category: 'Invitation',
+      status: 'TODO',
+      due_date: booking.wedding_date || undefined,
+      sort_order: sortOrder++,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  const hasTM = rawFeatures.some((f) => f.toLowerCase().includes('technical meeting') || f.toLowerCase().includes('gladi'));
+  if (!hasTM) {
+    tasks.push({
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 't' + Math.random().toString(36).slice(2, 9),
+      project_id: projectId,
+      title: 'Technical Meeting Final & Gladi Resik Bersama Seluruh Kru WO',
+      description: 'Sinkronisasi rundown H-7 bersama tim WO, keluarga inti, dan seluruh vendor pendukung.',
+      category: 'Other',
+      status: 'TODO',
+      due_date: booking.wedding_date || undefined,
+      sort_order: sortOrder++,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  return tasks;
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -75,7 +134,7 @@ export async function GET(request: NextRequest) {
       // 1. Auto-healing: ONLY for CONFIRMED bookings!
       const { data: confirmedBookings } = await supabase
         .from('bookings')
-        .select('*, customer:profiles(*)')
+        .select('*, package:wedding_packages(*), customer:profiles(*)')
         .eq('status', 'CONFIRMED')
         .order('created_at', { ascending: false });
 
@@ -100,6 +159,8 @@ export async function GET(request: NextRequest) {
             .eq('booking_id', b.id)
             .maybeSingle();
 
+          let targetProjId = existingProj?.id;
+
           if (!existingProj) {
             const custName = b.customer?.full_name || 'Klien Pengantin';
             const projId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'w' + Date.now();
@@ -121,26 +182,30 @@ export async function GET(request: NextRequest) {
               .maybeSingle();
 
             if (!pError && newProj) {
-              const tasksToInsert = DEFAULT_TASK_TEMPLATES.map((tpl) => ({
-                id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 't' + Math.random().toString(36).slice(2, 9),
-                project_id: newProj.id,
-                title: tpl.title,
-                description: tpl.description,
-                category: tpl.category,
-                status: 'TODO',
-                due_date: b.wedding_date,
-                sort_order: tpl.sort_order,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              }));
+              targetProjId = newProj.id;
+            }
+          }
 
+          if (targetProjId) {
+            // Check existing tasks for this project
+            const { data: existingTasks } = await supabase
+              .from('wedding_tasks')
+              .select('id')
+              .eq('project_id', targetProjId);
+
+            if (!existingTasks || existingTasks.length <= 1) {
+              // Delete placeholder task if any and populate full package tasks
+              if (existingTasks && existingTasks.length > 0) {
+                await supabase.from('wedding_tasks').delete().eq('project_id', targetProjId);
+              }
+              const tasksToInsert = buildTasksForBooking(b, targetProjId);
               await supabase.from('wedding_tasks').insert(tasksToInsert);
             }
           }
         }
       }
 
-      // 2. Fetch projects with tasks joined
+      // 2. Fetch projects with tasks joined (only confirmed)
       let query = supabase
         .from('wedding_projects')
         .select('*, tasks:wedding_tasks(*)')
@@ -152,18 +217,20 @@ export async function GET(request: NextRequest) {
 
       const { data, error } = await query;
       if (!error && data) {
-        projects = data.map((p: any) => ({
-          id: p.id,
-          booking_id: p.booking_id,
-          customer_id: p.customer_id,
-          title: p.title,
-          wedding_date: p.wedding_date,
-          progress_percent: Number(p.progress_percent || 0),
-          notes: p.notes,
-          created_at: p.created_at,
-          updated_at: p.updated_at,
-          tasks: (p.tasks || []).sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)),
-        }));
+        projects = data
+          .filter((p: any) => !p.booking_id || confirmedIds.has(p.booking_id))
+          .map((p: any) => ({
+            id: p.id,
+            booking_id: p.booking_id,
+            customer_id: p.customer_id,
+            title: p.title,
+            wedding_date: p.wedding_date,
+            progress_percent: Number(p.progress_percent || 0),
+            notes: p.notes,
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+            tasks: (p.tasks || []).sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)),
+          }));
       }
     } catch (e: any) {
       console.warn('GET /api/projects Supabase error:', e.message);
@@ -204,7 +271,7 @@ export async function POST(request: NextRequest) {
             category: task.category || 'Other',
             status: task.status || 'TODO',
             due_date: task.due_date || null,
-            sort_order: task.sort_order || 99,
+            sort_order: Number(task.sort_order) || 99,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           });
@@ -263,13 +330,11 @@ export async function PATCH(request: NextRequest) {
           }
         }
       } catch (err: any) {
-        console.warn('PATCH /api/projects error:', err.message);
+        console.warn('PATCH /api/projects exception:', err.message);
       }
     }
 
-    if (status) {
-      demoStore.updateTaskStatus(taskId, status as TaskStatus);
-    }
+    demoStore.updateTaskStatus(taskId, status as TaskStatus);
 
     return NextResponse.json({ ok: true, taskId, status });
   } catch (err: any) {
