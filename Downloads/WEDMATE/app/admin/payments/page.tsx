@@ -236,6 +236,33 @@ export default function AdminPaymentVerificationPage() {
     }
   };
 
+  const handleExportCSV = () => {
+    if (filteredTransactions.length === 0) {
+      alert('Tidak ada data transaksi untuk diekspor.');
+      return;
+    }
+
+    const headers = ['No Transaksi', 'Nama Klien', 'Metode Pembayaran', 'Nominal (Rp)', 'Status', 'Catatan', 'Tanggal Transaksi'];
+    const rows = filteredTransactions.map((tx) => [
+      `"${tx.transaction_number}"`,
+      `"${tx.customer?.full_name || 'Klien'}"`,
+      `"${tx.payment_method}"`,
+      tx.amount,
+      `"${tx.status}"`,
+      `"${(tx.notes || '').replace(/"/g, '""')}"`,
+      `"${tx.created_at}"`,
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `rekap_pembayaran_wedmate_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="min-h-screen bg-[#FAF8F5] py-10 px-4 sm:px-6 lg:px-8 pb-32">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -449,6 +476,16 @@ export default function AdminPaymentVerificationPage() {
                   className="pl-8 pr-3 py-2 text-xs rounded-xl border border-[#E8E2D8] bg-[#FAF8F5] text-[#1A1A1A] focus:outline-none focus:border-[#C8A46A] w-48 sm:w-60"
                 />
               </div>
+
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-[#FAF8F5] border border-[#E8E2D8] text-[#1A1A1A] font-semibold text-xs shadow-xs transition cursor-pointer shrink-0"
+                title="Ekspor Rekap Data Transaksi ke CSV / Excel"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline">Ekspor CSV</span>
+              </button>
             </div>
           </div>
 
