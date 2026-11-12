@@ -45,6 +45,23 @@ export async function GET(request: NextRequest) {
           updated_at: p.updated_at,
           tasks: (p.tasks || []).sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)),
         }));
+
+        // Filter out any projects whose associated booking has been CANCELLED
+        if (projects.length > 0) {
+          const { data: bList } = await supabase.from('bookings').select('id, status');
+          if (bList && bList.length > 0) {
+            const cancelledBookingIds = new Set(
+              bList.filter((b: any) => b.status === 'CANCELLED' || b.status === 'REJECTED').map((b: any) => b.id)
+            );
+            const staleProjects = projects.filter((p) => p.booking_id && cancelledBookingIds.has(p.booking_id));
+            if (staleProjects.length > 0) {
+              for (const stale of staleProjects) {
+                await cleanupProjectForBooking(supabase, stale.booking_id);
+              }
+            }
+            projects = projects.filter((p) => !p.booking_id || !cancelledBookingIds.has(p.booking_id));
+          }
+        }
       }
 
       // Safety Net: If no projects found, check if there are confirmed bookings that need healing
@@ -164,9 +181,13 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const proj = demoStore.getProjectById(projectId);
-      if (proj && proj.booking_id) {
-        demoStore.cancelBooking(proj.booking_id, reason);
+      try {
+        const proj = demoStore.getProjectById(projectId);
+        if (proj && proj.booking_id) {
+          demoStore.cancelBooking(proj.booking_id, reason);
+        }
+      } catch (e: any) {
+        console.warn('demoStore.cancelBooking local skip:', e.message);
       }
       return NextResponse.json({ ok: true, message: 'Proyek berhasil dibatalkan.' });
     }
@@ -195,7 +216,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      demoStore.confirmBooking(payload.bookingId);
+      try {
+        demoStore.confirmBooking(payload.bookingId);
+      } catch (e: any) {
+        console.warn('demoStore.confirmBooking local skip:', e.message);
+      }
       return NextResponse.json({ ok: true, message: 'Proyek berhasil dipulihkan.' });
     }
 

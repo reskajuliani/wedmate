@@ -199,7 +199,10 @@ function AdminApprovalsContent() {
         prev.map((b) => (b.id === booking.id ? { ...b, status: 'CONFIRMED' } : b))
       );
       demoStore.confirmBooking(booking.id, adminId);
-      await supabaseService.updateBookingStatus(booking.id, 'CONFIRMED');
+      await Promise.allSettled([
+        supabaseService.updateBookingStatus(booking.id, 'CONFIRMED'),
+        supabaseService.restoreProject(booking.id),
+      ]);
       showToast(
         `Booking ${booking.id} berhasil DIKONFIRMASI! Proyek checklist dan invoice tagihan otomatis diterbitkan ke portal klien.`
       );
@@ -530,9 +533,25 @@ function AdminApprovalsContent() {
                                 </button>
                               </div>
                             ) : item.status === 'APPROVED' ? (
-                              <span className="text-[11px] text-emerald-700 font-medium">
-                                ✓ Akun Aktif
-                              </span>
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="text-[11px] text-emerald-700 font-medium">
+                                  ✓ Akun Aktif
+                                </span>
+                                {item.phone && (
+                                  <a
+                                    href={`https://wa.me/${item.phone.replace(/^0/, '62').replace(/\D/g, '')}?text=${encodeURIComponent(
+                                      `Halo Kak ${item.full_name}! Akun portal pengantin WEDMATE Anda telah DISETUJUI. Silakan login ke https://wedmate-mauve.vercel.app/login untuk memilih paket dan tanggal pernikahan Anda.`
+                                    )}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center gap-1 text-[11px] font-semibold"
+                                    title="Hubungi via WhatsApp"
+                                  >
+                                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>WA</span>
+                                  </a>
+                                )}
+                              </div>
                             ) : (
                               <button
                                 onClick={() => handleApproveAccount(item)}
@@ -774,6 +793,20 @@ function AdminApprovalsContent() {
                                 <CreditCard className="w-3.5 h-3.5" />
                                 <span>Tagihan</span>
                               </Link>
+                              {b.customer?.phone && (
+                                <a
+                                  href={`https://wa.me/${b.customer.phone.replace(/^0/, '62').replace(/\D/g, '')}?text=${encodeURIComponent(
+                                    `Halo Kak ${b.customer.full_name || 'Pengantin'}! 💍 Reservasi pernikahan Anda bersama WEDMATE untuk tanggal ${formatDateIndo(b.wedding_date)} di ${b.venue_name} telah DIKONFIRMASI oleh Wedding Director. Silakan login ke portal untuk melihat checklist persiapan dan invoice tagihan Anda: https://wedmate-mauve.vercel.app/`
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition text-center flex items-center justify-center gap-1 shadow-xs"
+                                  title="Chat WhatsApp Pengantin"
+                                >
+                                  <Phone className="w-3.5 h-3.5" />
+                                  <span>WA</span>
+                                </a>
+                              )}
                               <button
                                 onClick={() => handleOpenCancelBooking(b)}
                                 className="py-2 px-2.5 rounded-xl bg-white border border-red-300 hover:bg-red-50 text-red-600 font-semibold text-xs transition flex items-center justify-center gap-1 cursor-pointer"

@@ -23,6 +23,7 @@ import {
   ArrowRight,
   PartyPopper,
   Printer,
+  XCircle,
 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { buildTasksForBooking } from '@/lib/task-generator';
@@ -118,6 +119,11 @@ export default function CustomerChecklistPage() {
     return demoStore.getBookings(effectiveCustomerId).find((b) => b.status === 'PENDING') || null;
   });
 
+  const [cancelledBooking, setCancelledBooking] = useState<Booking | null>(() => {
+    if (!effectiveCustomerId) return null;
+    return demoStore.getBookings(effectiveCustomerId).find((b) => b.status === 'CANCELLED') || null;
+  });
+
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -151,9 +157,11 @@ export default function CustomerChecklistPage() {
         // Strictly prioritize CONFIRMED booking over any pending drafts
         const confirmed = userBookings.find((b) => b.status === 'CONFIRMED');
         const pending = userBookings.find((b) => b.status === 'PENDING');
+        const cancelled = userBookings.find((b) => b.status === 'CANCELLED');
 
         setConfirmedBooking(confirmed || null);
         setPendingBooking(pending || null);
+        setCancelledBooking(cancelled || null);
 
         if (userProjects.length > 0) {
           const currentProject = userProjects[0];
@@ -685,8 +693,40 @@ export default function CustomerChecklistPage() {
               </Link>
             </div>
           </div>
+        ) : cancelledBooking ? (
+          /* 4. CASE CANCELLED: Display rejection notice politely with reason */
+          <div className="bg-white rounded-3xl p-8 border border-red-200/90 shadow-xs text-center max-w-2xl mx-auto space-y-4">
+            <div className="w-14 h-14 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto border border-red-200">
+              <XCircle className="w-7 h-7" />
+            </div>
+            <h3 className="font-serif text-2xl font-bold text-[#1A1A1A]">
+              Pengajuan Reservasi Ditolak / Dibatalkan
+            </h3>
+            <p className="text-xs sm:text-sm text-[#1A1A1A]/70 leading-relaxed max-w-lg mx-auto">
+              Mohon maaf, pengajuan reservasi tanggal{' '}
+              <strong className="text-[#1A1A1A] font-semibold">{formatDateIndo(cancelledBooking.wedding_date)}</strong>{' '}
+              belum dapat disetujui oleh Wedding Director WEDMATE.
+            </p>
+            <div className="p-3.5 rounded-2xl bg-red-50/80 border border-red-200 text-xs text-red-950 text-left max-w-md mx-auto space-y-1">
+              <span className="font-bold block text-[10px] uppercase text-red-700 tracking-wider">
+                Alasan Penolakan dari Admin:
+              </span>
+              <p className="italic text-red-900 leading-relaxed">
+                &ldquo;{cancelledBooking.notes || 'Jadwal bentrok atau kuota layanan pada tanggal tersebut telah penuh.'}&rdquo;
+              </p>
+            </div>
+            <div className="pt-2">
+              <Link
+                href="/customer/booking"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#1A1A1A] hover:bg-black text-white text-xs font-semibold shadow-xs transition"
+              >
+                <span>Ajukan Tanggal atau Paket Baru</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </div>
         ) : (
-          /* 4. CASE EMPTY: NO BOOKINGS */
+          /* 5. CASE EMPTY: NO BOOKINGS */
           <EmptyState
             icon={ListTodo}
             title="Belum ada data tersedia"

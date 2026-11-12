@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { demoStore } from '@/lib/demo-store';
 import { supabaseService } from '@/lib/supabase-service';
-import { WeddingProject, WeddingTask, TaskStatus } from '@/lib/types';
+import { WeddingProject, WeddingTask, TaskStatus, Booking } from '@/lib/types';
 import { formatDateIndo } from '@/lib/utils';
 import {
   ListTodo,
@@ -24,9 +24,12 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  XCircle,
   AlertTriangle,
+  Printer,
 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ChecklistDocumentModal } from '@/components/documents/ChecklistDocumentModal';
 
 const CATEGORIES: WeddingTask['category'][] = [
   'Venue',
@@ -54,9 +57,12 @@ const CATEGORY_COLORS: Record<WeddingTask['category'], string> = {
 
 export default function AdminProjectsPage() {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<WeddingProject[]>(() => {
+  const [activeProjects, setActiveProjects] = useState<WeddingProject[]>(() => {
     return demoStore.getProjects();
   });
+  const [cancelledProjects, setCancelledProjects] = useState<WeddingProject[]>([]);
+  const [projectFilter, setProjectFilter] = useState<'ACTIVE' | 'CANCELLED' | 'ALL'>('ACTIVE');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
 
@@ -67,7 +73,16 @@ export default function AdminProjectsPage() {
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [formError, setFormError] = useState('');
-  const [notification, setNotification] = useState<string | null>(null);
+
+  // Print Checklist Modal State
+  const [isChecklistModalOpen, setIsChecklistModalOpen] = useState(false);
+  const [selectedPrintProject, setSelectedPrintProject] = useState<WeddingProject | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Modal: Tolak / Batalkan Proyek
+  const [cancelTargetProject, setCancelTargetProject] = useState<WeddingProject | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
 
   // Subscribe to store with Smart Polling
   useEffect(() => {
@@ -77,11 +92,43 @@ export default function AdminProjectsPage() {
 
     const refreshData = async () => {
       try {
-        const all = await supabaseService.getProjects();
+        const [allProjects, allBookings] = await Promise.all([
+          supabaseService.getProjects(),
+          supabaseService.getBookings(),
+        ]);
         if (!isMounted) return;
-        setProjects(all);
-        if (all.length > 0 && !expandedProjectId) {
-          setExpandedProjectId(all[0].id);
+
+        // Build mapping of bookings for rich details
+        const bookingMap = new Map<string, Booking>();
+        allBookings.forEach((b) => bookingMap.set(b.id, b));
+
+        // Enrich active projects with their booking details
+        const enrichedActive = allProjects.map((p) => ({
+          ...p,
+          booking: p.booking || bookingMap.get(p.booking_id),
+        }));
+        setActiveProjects(enrichedActive);
+
+        // Cancelled bookings become cancelled project items
+        const cancelled: WeddingProject[] = allBookings
+          .filter((b) => b.status === 'CANCELLED')
+          .map((b) => ({
+            id: b.id,
+            booking_id: b.id,
+            customer_id: b.customer_id,
+            title: `Pernikahan ${b.customer?.full_name || 'Klien'}`,
+            wedding_date: b.wedding_date,
+            progress_percent: 0,
+            notes: b.notes || 'Dibatalkan oleh Admin',
+            created_at: b.created_at,
+            updated_at: b.updated_at,
+            tasks: [] as WeddingTask[],
+            booking: b,
+          }));
+        setCancelledProjects(cancelled);
+
+        if (enrichedActive.length > 0 && !expandedProjectId) {
+          setExpandedProjectId(enrichedActive[0].id);
         }
       } catch (err) {
         console.warn('Refresh projects error:', err);
@@ -124,14 +171,14 @@ export default function AdminProjectsPage() {
     };
   }, [expandedProjectId]);
 
-  const showNotification = (msg: string) => {
-    setNotification(msg);
+  const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message: msg, type });
     setTimeout(() => setNotification(null), 4000);
   };
 
   const handleToggleTask = async (task: WeddingTask) => {
     const nextStatus: TaskStatus = task.status === 'COMPLETED' ? 'TODO' : 'COMPLETED';
-    setProjects((prev) =>
+    setActiveProjects((prev) =>
       prev.map((p) => {
         if (p.id === task.project_id) {
           const updatedTasks = (p.tasks || []).map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t));
@@ -147,7 +194,7 @@ export default function AdminProjectsPage() {
   };
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
-    setProjects((prev) =>
+    setActiveProjects((prev) =>
       prev.map((p) => {
         const foundTask = (p.tasks || []).find((t) => t.id === taskId);
         if (foundTask) {
@@ -196,15 +243,82 @@ export default function AdminProjectsPage() {
     showNotification('Tugas baru berhasil ditambahkan ke checklist klien.');
   };
 
-  // Filter projects
-  const filteredProjects = projects.filter((p) => {
+  // --- REJECT / CANCEL PROJECT HANDLERS ---
+  const handleOpenCancelProject = (proj: WeddingProject) => {
+    setCancelTargetProject(proj);
+    setCancelReason('Jadwal bentrok atau kuota layanan pada tanggal tersebut telah penuh.');
+  };
+
+  const handleConfirmCancelProject = async () => {
+    if (!cancelTargetProject) return;
+    const target = cancelTargetProject;
+    const bookingId = target.booking_id || target.id;
+    const reason = cancelReason.trim() || 'Jadwal bentrok atau kuota layanan pada tanggal tersebut telah penuh.';
+
+    setIsSubmittingCancel(true);
+    try {
+      // Optimistic UI updates
+      setActiveProjects((prev) => prev.filter((p) => p.id !== target.id));
+      setCancelledProjects((prev) => [
+        {
+          ...target,
+          id: bookingId,
+          booking_id: bookingId,
+          notes: reason,
+          progress_percent: 0,
+          tasks: [],
+        },
+        ...prev.filter((p) => (p.booking_id || p.id) !== bookingId),
+      ]);
+
+      // Sync to demoStore, Supabase Projects Registry & Bookings API
+      demoStore.cancelBooking(bookingId, reason);
+      await Promise.allSettled([
+        supabaseService.cancelProject(target.id, reason),
+        supabaseService.updateBookingStatus(bookingId, 'CANCELLED', reason),
+      ]);
+
+      showNotification(`Proyek "${target.title}" berhasil DITOLAK / DIBATALKAN. Alasan penolakan telah diteruskan ke portal klien.`);
+    } catch (err: any) {
+      showNotification(err?.message || 'Gagal membatalkan proyek.', 'error');
+    } finally {
+      setIsSubmittingCancel(false);
+      setCancelTargetProject(null);
+    }
+  };
+
+  const handleReactivateProject = async (proj: WeddingProject) => {
+    const bookingId = proj.booking_id || proj.id;
+    try {
+      demoStore.confirmBooking(bookingId, user?.id);
+      await Promise.allSettled([
+        supabaseService.restoreProject(bookingId),
+        supabaseService.updateBookingStatus(bookingId, 'CONFIRMED'),
+      ]);
+      showNotification(`Proyek "${proj.title}" berhasil DIAKTIFKAN KEMBALI. Checklist tugas dan invoice telah dipulihkan.`);
+      // Switch tab to active view
+      setProjectFilter('ACTIVE');
+    } catch (err: any) {
+      showNotification(err?.message || 'Gagal mengaktifkan kembali proyek.', 'error');
+    }
+  };
+
+  // --- FILTERING ---
+  const visibleProjects = (
+    projectFilter === 'ACTIVE'
+      ? activeProjects
+      : projectFilter === 'CANCELLED'
+      ? cancelledProjects
+      : [...activeProjects, ...cancelledProjects]
+  ).filter((p) => {
     const titleMatch = p.title.toLowerCase().includes(searchQuery.toLowerCase());
     const notesMatch = p.notes?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
-    return titleMatch || notesMatch;
+    const venueMatch = p.booking?.venue_name?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
+    return titleMatch || notesMatch || venueMatch;
   });
 
-  const totalTasksAll = projects.reduce((sum, p) => sum + (p.tasks?.length || 0), 0);
-  const completedTasksAll = projects.reduce(
+  const totalTasksAll = activeProjects.reduce((sum, p) => sum + (p.tasks?.length || 0), 0);
+  const completedTasksAll = activeProjects.reduce(
     (sum, p) => sum + (p.tasks?.filter((t) => t.status === 'COMPLETED').length || 0),
     0
   );
@@ -237,10 +351,10 @@ export default function AdminProjectsPage() {
                 </span>
               </div>
               <h1 className="font-serif text-3xl font-bold text-charcoal">
-                Proyek & Checklist Klien Aktif
+                Proyek &amp; Checklist Klien
               </h1>
               <p className="text-xs text-charcoal-500 mt-1">
-                Pantau seluruh proyek pernikahan pengantin, milestone kesiapan, dan checklist persiapan pernikahan terintegrasi.
+                Pantau seluruh proyek pernikahan pengantin, kelola checklist persiapan, dan pantau status penolakan atau pembatalan proyek.
               </p>
             </div>
 
@@ -260,12 +374,15 @@ export default function AdminProjectsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-softbeige shadow-sm">
             <div className="text-xs text-charcoal-400 mb-1 flex items-center justify-between">
-              <span>Total Proyek Pernikahan</span>
+              <span>Total Proyek Berjalan</span>
               <Sparkles className="w-4 h-4 text-champagne" />
             </div>
-            <div className="text-2xl font-bold font-serif text-charcoal">{projects.length}</div>
-            <div className="text-[11px] text-emerald-700 mt-1 font-medium">
-              Proyek aktif setelah konfirmasi booking
+            <div className="text-2xl font-bold font-serif text-charcoal">{activeProjects.length}</div>
+            <div className="text-[11px] text-emerald-700 mt-1 font-medium flex items-center justify-between">
+              <span>Proyek aktif dikonfirmasi</span>
+              {cancelledProjects.length > 0 && (
+                <span className="text-red-600 font-semibold">({cancelledProjects.length} ditolak)</span>
+              )}
             </div>
           </div>
 
@@ -276,7 +393,7 @@ export default function AdminProjectsPage() {
             </div>
             <div className="text-2xl font-bold font-serif text-charcoal">{totalTasksAll}</div>
             <div className="text-[11px] text-charcoal-500 mt-1 font-medium">
-              Di seluruh proyek pasangan pengantin
+              Di seluruh proyek pasangan pengantin aktif
             </div>
           </div>
 
@@ -296,44 +413,202 @@ export default function AdminProjectsPage() {
 
         {/* Notification Toast */}
         {notification && (
-          <div className="p-4 rounded-2xl border bg-emerald-50 text-emerald-800 border-emerald-200 text-xs font-semibold flex items-center gap-2 transition animate-fadeIn">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{notification}</span>
+          <div
+            className={`p-4 rounded-2xl border text-xs font-semibold flex items-center gap-2 transition animate-fadeIn ${
+              notification.type === 'error'
+                ? 'bg-red-50 text-red-800 border-red-200'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            }`}
+          >
+            {notification.type === 'error' ? (
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            )}
+            <span>{notification.message}</span>
           </div>
         )}
 
-        {/* Search */}
-        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-softbeige shadow-sm flex items-center justify-between gap-4">
-          <div className="relative w-full max-w-md">
-            <Search className="w-4 h-4 text-charcoal-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Cari nama proyek pernikahan atau pasangan..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-softbeige bg-ivory/50 focus:outline-none focus:border-champagne focus:bg-white transition"
-            />
-          </div>
+        {/* Filter Pills & Search */}
+        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-softbeige shadow-sm space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            {/* Filter Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+              {(
+                [
+                  { key: 'ACTIVE', label: `Proyek Berjalan (${activeProjects.length})` },
+                  { key: 'CANCELLED', label: `Ditolak / Dibatalkan (${cancelledProjects.length})` },
+                  { key: 'ALL', label: `Semua Proyek (${activeProjects.length + cancelledProjects.length})` },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setProjectFilter(tab.key)}
+                  className={`px-4 py-2.5 rounded-xl font-semibold text-xs whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                    projectFilter === tab.key
+                      ? tab.key === 'CANCELLED'
+                        ? 'bg-red-600 text-white shadow-xs'
+                        : 'bg-[#1A1A1A] text-white shadow-xs'
+                      : 'bg-[#FAF8F5] text-charcoal-600 hover:text-charcoal border border-softbeige'
+                  }`}
+                >
+                  {tab.key === 'CANCELLED' && <XCircle className="w-3.5 h-3.5" />}
+                  {tab.key === 'ACTIVE' && <Sparkles className="w-3.5 h-3.5" />}
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
 
-          <span className="text-xs text-charcoal-400 font-mono">
-            Menampilkan {filteredProjects.length} Proyek
-          </span>
+            {/* Search Box */}
+            <div className="relative w-full md:w-72">
+              <Search className="w-4 h-4 text-charcoal-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Cari proyek atau venue..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-softbeige bg-ivory/50 focus:outline-none focus:border-champagne focus:bg-white transition"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Projects Accordion / Cards List */}
-        {filteredProjects.length === 0 ? (
-          <EmptyState
-            icon={ListTodo}
-            title="Belum ada data tersedia"
-            description="Proyek pernikahan otomatis diinisiasi dan muncul di sini begitu Anda mengonfirmasi booking klien di tab Pengajuan Booking."
-            actionLabel="Buka Pengajuan Booking"
-            actionHref="/admin/approvals?tab=bookings"
-          />
+        {visibleProjects.length === 0 ? (
+          projectFilter === 'CANCELLED' ? (
+            <div className="bg-white rounded-3xl p-10 border border-softbeige text-center max-w-xl mx-auto space-y-3">
+              <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <h4 className="font-serif text-lg font-bold text-charcoal">Tidak Ada Proyek yang Ditolak</h4>
+              <p className="text-xs text-charcoal-500">
+                Saat ini tidak ada proyek pernikahan yang ditolak atau dibatalkan. Semua reservasi berjalan normal.
+              </p>
+            </div>
+          ) : (
+            <EmptyState
+              icon={ListTodo}
+              title="Belum ada data tersedia"
+              description="Proyek pernikahan otomatis diinisiasi dan muncul di sini begitu Anda mengonfirmasi booking klien di tab Pengajuan Booking."
+              actionLabel="Buka Pengajuan Booking"
+              actionHref="/admin/approvals?tab=bookings"
+            />
+          )
         ) : (
           <div className="space-y-6">
-            {filteredProjects.map((proj) => {
+            {visibleProjects.map((proj) => {
+              const isCancelled = cancelledProjects.some(
+                (cp) => cp.id === proj.id || (proj.booking_id && cp.booking_id === proj.booking_id)
+              );
+
+              // -----------------------------------------------------------
+              // 1. RENDER: CANCELLED / REJECTED PROJECT CARD
+              // -----------------------------------------------------------
+              if (isCancelled) {
+                return (
+                  <div
+                    key={proj.id}
+                    className="bg-white rounded-3xl border border-red-200/90 shadow-xs overflow-hidden transition-all duration-300 relative"
+                  >
+                    <div className="h-1.5 bg-gradient-to-r from-red-500 via-rose-500 to-red-400" />
+
+                    <div className="p-6 sm:p-8 space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-bold font-mono px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 uppercase flex items-center gap-1 border border-red-200">
+                              <XCircle className="w-3 h-3 text-red-600" />
+                              <span>DITOLAK / DIBATALKAN</span>
+                            </span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                              ID: {proj.booking_id ? proj.booking_id.substring(0, 8) : proj.id.substring(0, 8)}
+                            </span>
+                            <span className="text-xs text-charcoal-400 flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5 text-champagne" />
+                              <span>{formatDateIndo(proj.wedding_date)}</span>
+                            </span>
+                          </div>
+
+                          <h3 className="font-serif text-2xl font-bold text-charcoal">
+                            {proj.title}
+                          </h3>
+
+                          {proj.booking && (
+                            <div className="text-xs text-charcoal-500 flex items-center gap-2 flex-wrap pt-0.5">
+                              {proj.booking.package && (
+                                <span className="font-semibold text-charcoal-700 bg-softbeige/60 px-2.5 py-0.5 rounded-lg">
+                                  Paket: {proj.booking.package.name}
+                                </span>
+                              )}
+                              {proj.booking.venue_name && (
+                                <span className="text-charcoal-500">
+                                  Lokasi: {proj.booking.venue_name}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => handleReactivateProject(proj)}
+                            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs hover:shadow-emerald-200"
+                            title="Aktifkan kembali proyek ini dan pulihkan tugas checklist serta tagihan"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Aktifkan Kembali</span>
+                          </button>
+
+                          <Link
+                            href="/admin/approvals?tab=bookings"
+                            className="px-3.5 py-2.5 rounded-xl border border-softbeige hover:bg-ivory text-charcoal-600 font-semibold text-xs transition flex items-center gap-1"
+                            title="Lihat rincian pemesanan di Pusat Persetujuan"
+                          >
+                            <ArrowRight className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Pusat Persetujuan</span>
+                          </Link>
+                        </div>
+                      </div>
+
+                      {/* Rejection Banner */}
+                      <div className="p-4 rounded-2xl bg-red-50/80 border border-red-200 text-red-950 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-xs font-bold text-red-900">
+                            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                            <span>Status: Proyek Ditolak / Dibatalkan oleh Admin</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-red-600 font-semibold">
+                            Checklist &amp; Tagihan Dinonaktifkan
+                          </span>
+                        </div>
+
+                        <div className="bg-white/80 p-3 rounded-xl border border-red-200 text-xs text-red-950 space-y-0.5">
+                          <span className="font-bold block text-[10px] uppercase text-red-700 tracking-wider">
+                            Alasan Penolakan / Catatan Admin:
+                          </span>
+                          <p className="italic text-red-900">
+                            &ldquo;{proj.notes || 'Jadwal bentrok atau kuota layanan pada tanggal tersebut telah penuh.'}&rdquo;
+                          </p>
+                        </div>
+
+                        <div className="text-[11px] text-red-700/80 flex items-center gap-2">
+                          <ShieldCheck className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                          <span>
+                            Alasan di atas telah diteruskan secara otomatis ke Portal Pengantin klien. Klien dapat mengajukan jadwal atau paket lain dari akun mereka.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // -----------------------------------------------------------
+              // 2. RENDER: ACTIVE WEDDING PROJECT CARD
+              // -----------------------------------------------------------
               const isExpanded = expandedProjectId === proj.id;
-              const projectTasks = demoStore.getTasksByProjectId(proj.id);
+              const projectTasks = proj.tasks || demoStore.getTasksByProjectId(proj.id);
               const completedCount = projectTasks.filter((t) => t.status === 'COMPLETED').length;
 
               return (
@@ -366,10 +641,33 @@ export default function AdminProjectsPage() {
                         )}
                       </div>
 
-                      {/* Progress Stat */}
-                      <div className="flex items-center gap-4 shrink-0">
+                      {/* Header Actions & Progress Stat */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        {/* Cetak Lembar Kerja Proyek */}
+                        <button
+                          onClick={() => {
+                            setSelectedPrintProject(proj);
+                            setIsChecklistModalOpen(true);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-white border border-softbeige hover:bg-ivory text-charcoal-700 font-semibold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="Cetak Lembar Kerja Checklist Proyek Ini"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-[#C8A46A]" />
+                          <span className="hidden sm:inline">Cetak Checklist</span>
+                        </button>
+
+                        {/* Tolak / Batalkan Proyek Button */}
+                        <button
+                          onClick={() => handleOpenCancelProject(proj)}
+                          className="px-3 py-2 rounded-xl bg-white border border-red-200 hover:bg-red-50 text-red-600 font-semibold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="Tolak atau Batalkan Proyek Ini"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Tolak / Batalkan</span>
+                        </button>
+
                         <div className="text-right">
-                          <div className="text-3xl font-serif font-bold text-champagne-800 font-mono">
+                          <div className="text-2xl sm:text-3xl font-serif font-bold text-champagne-800 font-mono">
                             {proj.progress_percent}%
                           </div>
                           <div className="text-[11px] text-charcoal-400">
@@ -380,6 +678,7 @@ export default function AdminProjectsPage() {
                         <button
                           onClick={() => setExpandedProjectId(isExpanded ? null : proj.id)}
                           className="p-2.5 rounded-2xl border border-softbeige hover:border-champagne hover:bg-champagne-50 text-charcoal transition"
+                          title={isExpanded ? 'Tutup Rincian Checklist' : 'Buka Rincian Checklist'}
                         >
                           {isExpanded ? (
                             <ChevronUp className="w-5 h-5 text-champagne" />
@@ -535,7 +834,7 @@ export default function AdminProjectsPage() {
 
         {/* MODAL: TAMBAH TUGAS (ADMIN) */}
         {targetProjectForTask && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/50 backdrop-blur-sm animate-fadeIn">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/50 backdrop-blur-xs animate-fadeIn">
             <div className="bg-white rounded-3xl max-w-lg w-full border border-softbeige shadow-2xl p-6 sm:p-8 space-y-5">
               <div className="flex items-center justify-between pb-4 border-b border-softbeige">
                 <div className="flex items-center gap-2.5">
@@ -646,6 +945,121 @@ export default function AdminProjectsPage() {
             </div>
           </div>
         )}
+
+        {/* MODAL: TOLAK / BATALKAN PROYEK (ADMIN) */}
+        {cancelTargetProject && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal/60 backdrop-blur-xs animate-fadeIn">
+            <div className="bg-white rounded-3xl max-w-lg w-full border border-softbeige shadow-2xl p-6 sm:p-8 space-y-5">
+              <div className="flex items-center justify-between pb-4 border-b border-softbeige">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-700 flex items-center justify-center">
+                    <XCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif text-xl font-bold text-charcoal">
+                      Tolak / Batalkan Proyek
+                    </h3>
+                    <p className="text-xs text-charcoal-400">
+                      ID: {cancelTargetProject.booking_id ? cancelTargetProject.booking_id.substring(0, 8) : cancelTargetProject.id.substring(0, 8)} • {cancelTargetProject.title}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCancelTargetProject(null)}
+                  className="p-2 text-charcoal-400 hover:text-charcoal hover:bg-ivory rounded-full transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-900 text-xs space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                  Konfirmasi Pembatalan Proyek
+                </p>
+                <p className="text-red-700 leading-relaxed text-[11px]">
+                  Tindakan ini akan membatalkan status booking klien, menonaktifkan seluruh tugas checklist proyek, dan membatalkan invoice tagihan. Alasan penolakan di bawah akan otomatis ditampilkan ke pengantin di portal mereka.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-charcoal">
+                    Alasan Penolakan / Pembatalan *
+                  </label>
+                  <span className="text-[10px] text-gray-400">Pilih opsi cepat atau ketik sendiri</span>
+                </div>
+
+                {/* Preset Chips for Fast Selection */}
+                <div className="flex flex-wrap gap-1.5 pb-1">
+                  {[
+                    'Jadwal bentrok dengan agenda WO lain',
+                    'Klien mengajukan pembatalan jadwal',
+                    'Venue tidak tersedia pada tanggal tersebut',
+                    'Kuota tim operasional pada tanggal ini penuh',
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setCancelReason(preset)}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition cursor-pointer text-left ${
+                        cancelReason === preset
+                          ? 'bg-red-100 border-red-300 text-red-900 font-semibold'
+                          : 'bg-[#FAF8F5] border-[#E8E2D8] text-gray-600 hover:border-red-200 hover:text-red-800'
+                      }`}
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+
+                <textarea
+                  rows={3}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Contoh: Jadwal bentrok dengan acara lain, atau kuota tim operasional pada tanggal tersebut telah penuh..."
+                  className="w-full px-4 py-2.5 text-xs rounded-xl border border-softbeige focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400/20"
+                />
+                <p className="text-[10px] text-charcoal-400">
+                  Wajib cantumkan alasan yang jelas agar pengantin memahami alasan pembatalan dan dapat mengajukan jadwal lain.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-softbeige">
+                <button
+                  type="button"
+                  disabled={isSubmittingCancel}
+                  onClick={() => setCancelTargetProject(null)}
+                  className="px-5 py-2.5 rounded-xl border border-softbeige text-charcoal text-xs font-semibold hover:bg-ivory transition disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmittingCancel}
+                  onClick={handleConfirmCancelProject}
+                  className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>{isSubmittingCancel ? 'Memproses...' : 'Konfirmasi Tolak Proyek'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Printable Checklist Worksheet Modal for Admin */}
+        <ChecklistDocumentModal
+          isOpen={isChecklistModalOpen}
+          onClose={() => {
+            setIsChecklistModalOpen(false);
+            setSelectedPrintProject(null);
+          }}
+          project={selectedPrintProject}
+          tasks={selectedPrintProject?.tasks || (selectedPrintProject ? demoStore.getTasksByProjectId(selectedPrintProject.id) : [])}
+          confirmedBooking={selectedPrintProject?.booking as any || null}
+          clientName={selectedPrintProject?.booking?.customer?.full_name || selectedPrintProject?.title || 'Klien Pengantin'}
+        />
       </div>
     </div>
   );

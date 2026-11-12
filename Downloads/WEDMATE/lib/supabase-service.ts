@@ -250,7 +250,6 @@ export const supabaseService = {
             notes: data.notes,
             total_price: localBooking.total_price,
           }),
-          keepalive: true,
         });
         if (res.ok) {
           const json = await res.json();
@@ -318,7 +317,6 @@ export const supabaseService = {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, status, notes }),
-          keepalive: true,
         });
       } catch (err) {
         console.warn('Sync /api/bookings PATCH error:', err);
@@ -594,7 +592,6 @@ export const supabaseService = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(profileData),
-          keepalive: true,
         });
       } catch (err) {
         console.warn('Sync /api/profiles error:', err);
@@ -707,7 +704,6 @@ export const supabaseService = {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId, email: updated.email, status, notes }),
-          keepalive: true,
         });
       } catch (err) {
         console.warn('Sync /api/profiles PATCH error:', err);

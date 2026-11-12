@@ -27,6 +27,7 @@ import {
   Check,
   FileSpreadsheet,
   RefreshCw,
+  Phone,
 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -596,9 +597,25 @@ export default function AdminPaymentVerificationPage() {
                               </button>
                             </div>
                           ) : isApproved ? (
-                            <span className="text-[11px] text-emerald-700 font-medium">
-                              ✓ Terverifikasi
-                            </span>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <span className="text-[11px] text-emerald-700 font-medium">
+                                ✓ Terverifikasi
+                              </span>
+                              {tx.customer?.phone && (
+                                <a
+                                  href={`https://wa.me/${tx.customer.phone.replace(/^0/, '62').replace(/\D/g, '')}?text=${encodeURIComponent(
+                                    `Halo Kak ${tx.customer.full_name || 'Pengantin'}! 💐 Pembayaran transfer Anda sebesar ${formatRupiah(tx.amount)} (${tx.payment_method} - ${tx.transaction_number}) telah BERHASIL DIVERIFIKASI oleh tim keuangan WEDMATE. Saldo dan invoice tagihan Anda telah diperbarui di portal: https://wedmate-mauve.vercel.app/customer/payment`
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1 rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center gap-0.5 text-[10px] font-semibold"
+                                  title="Kirim Konfirmasi via WhatsApp"
+                                >
+                                  <Phone className="w-3 h-3 text-emerald-600" />
+                                  <span>WA</span>
+                                </a>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-[11px] text-rose-700 font-medium">
                               ✕ Ditolak
