@@ -3,7 +3,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { demoStore } from '@/lib/demo-store';
 import { WeddingProject, TaskStatus } from '@/lib/types';
-import { ensureProjectAndTasksForBooking } from '@/lib/task-generator';
+import { ensureProjectAndTasksForBooking, cleanupProjectForBooking } from '@/lib/task-generator';
 
 export const dynamic = 'force-dynamic';
 
@@ -132,7 +132,74 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, message: 'Projects synced successfully.' });
     }
 
-    // 2. Action: Add custom task to project
+    // 2. Action: Reject / Cancel Project
+    if (action === 'CANCEL_PROJECT' && projectId) {
+      const reason = payload.reason || 'Dibatalkan oleh Admin.';
+      if (isSupabaseConfigured()) {
+        try {
+          const supabase = createAdminClient();
+          const { data: proj } = await supabase
+            .from('wedding_projects')
+            .select('booking_id')
+            .eq('id', projectId)
+            .maybeSingle();
+
+          if (proj && proj.booking_id) {
+            await supabase
+              .from('bookings')
+              .update({
+                status: 'CANCELLED',
+                notes: reason,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', proj.booking_id);
+
+            await cleanupProjectForBooking(supabase, proj.booking_id);
+          } else {
+            await supabase.from('wedding_tasks').delete().eq('project_id', projectId);
+            await supabase.from('wedding_projects').delete().eq('id', projectId);
+          }
+        } catch (e: any) {
+          console.warn('POST /api/projects cancel project error:', e.message);
+        }
+      }
+
+      const proj = demoStore.getProjectById(projectId);
+      if (proj && proj.booking_id) {
+        demoStore.cancelBooking(proj.booking_id, reason);
+      }
+      return NextResponse.json({ ok: true, message: 'Proyek berhasil dibatalkan.' });
+    }
+
+    // 3. Action: Restore / Re-activate Cancelled Project
+    if (action === 'RESTORE_PROJECT' && payload.bookingId) {
+      if (isSupabaseConfigured()) {
+        try {
+          const supabase = createAdminClient();
+          const { data: b } = await supabase
+            .from('bookings')
+            .update({
+              status: 'CONFIRMED',
+              notes: 'Dipulihkan kembali oleh Admin.',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', payload.bookingId)
+            .select('*, package:wedding_packages(*), customer:profiles(*)')
+            .maybeSingle();
+
+          if (b) {
+            await ensureProjectAndTasksForBooking(supabase, b);
+          }
+        } catch (e: any) {
+          console.warn('POST /api/projects restore project error:', e.message);
+        }
+      }
+
+      demoStore.confirmBooking(payload.bookingId);
+      return NextResponse.json({ ok: true, message: 'Proyek berhasil dipulihkan.' });
+    }
+
+    // 4. Action: Add custom task to project
     if (action === 'ADD_TASK' && projectId && task) {
       const taskId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 't' + Date.now();
 
@@ -216,6 +283,56 @@ export async function PATCH(request: NextRequest) {
     demoStore.updateTaskStatus(taskId, status as TaskStatus);
 
     return NextResponse.json({ ok: true, taskId, status });
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const projectId = searchParams.get('id');
+    const reason = searchParams.get('reason') || 'Dibatalkan oleh Admin.';
+
+    if (!projectId) {
+      return NextResponse.json({ ok: false, error: 'Project ID wajib disertakan.' }, { status: 400 });
+    }
+
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createAdminClient();
+        const { data: proj } = await supabase
+          .from('wedding_projects')
+          .select('booking_id')
+          .eq('id', projectId)
+          .maybeSingle();
+
+        if (proj && proj.booking_id) {
+          await supabase
+            .from('bookings')
+            .update({
+              status: 'CANCELLED',
+              notes: reason,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', proj.booking_id);
+
+          await cleanupProjectForBooking(supabase, proj.booking_id);
+        } else {
+          await supabase.from('wedding_tasks').delete().eq('project_id', projectId);
+          await supabase.from('wedding_projects').delete().eq('id', projectId);
+        }
+      } catch (e: any) {
+        console.warn('DELETE /api/projects error:', e.message);
+      }
+    }
+
+    const proj = demoStore.getProjectById(projectId);
+    if (proj && proj.booking_id) {
+      demoStore.cancelBooking(proj.booking_id, reason);
+    }
+
+    return NextResponse.json({ ok: true, message: 'Proyek berhasil dibatalkan.' });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
   }

@@ -221,14 +221,20 @@ function AdminApprovalsContent() {
 
   const handleConfirmCancelBooking = async () => {
     if (!cancelBookingTarget) return;
+    const targetId = cancelBookingTarget.id;
     const reason = cancelBookingReason.trim() || 'Jadwal bentrok atau kuota layanan pada tanggal tersebut penuh.';
     setBookings((prev) =>
-      prev.map((b) => (b.id === cancelBookingTarget.id ? { ...b, status: 'CANCELLED', notes: reason } : b))
+      prev.map((b) => (b.id === targetId ? { ...b, status: 'CANCELLED', notes: reason } : b))
     );
-    demoStore.cancelBooking(cancelBookingTarget.id, reason);
-    await supabaseService.updateBookingStatus(cancelBookingTarget.id, 'CANCELLED', reason);
-    showToast(`Pengajuan booking ${cancelBookingTarget.id} berhasil DIBATALKAN. Alasan penolakan telah diteruskan ke portal klien.`);
-    setCancelBookingTarget(null);
+    try {
+      demoStore.cancelBooking(targetId, reason);
+      await supabaseService.updateBookingStatus(targetId, 'CANCELLED', reason);
+      showToast(`Pengajuan booking #${targetId.substring(0, 8)} berhasil DITOLAK / DIBATALKAN. Alasan penolakan telah diteruskan ke portal klien.`);
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal membatalkan booking.', 'error');
+    } finally {
+      setCancelBookingTarget(null);
+    }
   };
 
   // --- FILTERED DATA ---
@@ -558,7 +564,7 @@ function AdminApprovalsContent() {
                     { key: 'ALL', label: `Semua Booking (${bookings.length})` },
                     { key: 'PENDING', label: `Menunggu Konfirmasi (${pendingBookingsCount})` },
                     { key: 'CONFIRMED', label: `Terkonfirmasi (${bookings.filter((b) => b.status === 'CONFIRMED').length})` },
-                    { key: 'CANCELLED', label: `Dibatalkan (${bookings.filter((b) => b.status === 'CANCELLED').length})` },
+                    { key: 'CANCELLED', label: `Ditolak / Dibatalkan (${bookings.filter((b) => b.status === 'CANCELLED').length})` },
                   ] as const
                 ).map((tab) => (
                   <button
@@ -709,7 +715,18 @@ function AdminApprovalsContent() {
                               Booking aktif. Proyek checklist dan invoice sudah diterbitkan.
                             </span>
                           ) : (
-                            <span className="text-gray-600">Catatan: {b.notes || 'Tidak ada catatan'}</span>
+                            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-900 space-y-1">
+                              <div className="font-semibold text-xs text-red-900 flex items-center gap-1">
+                                <XCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                                <span>Booking Ditolak / Dibatalkan</span>
+                              </div>
+                              <p className="text-[11px] text-red-700 leading-relaxed">
+                                <strong>Alasan Penolakan:</strong> &ldquo;{b.notes || 'Dibatalkan oleh Admin'}&rdquo;
+                              </p>
+                              <p className="text-[10px] text-red-600/80">
+                                Notifikasi dan alasan telah diteruskan ke portal pengantin.
+                              </p>
+                            </div>
                           )}
                         </div>
 
@@ -742,7 +759,7 @@ function AdminApprovalsContent() {
                           )}
 
                           {b.status === 'CONFIRMED' && (
-                            <div className="flex items-center gap-1.5 w-full">
+                            <div className="flex flex-col sm:flex-row items-center gap-1.5 w-full">
                               <Link
                                 href="/admin/projects"
                                 className="flex-1 py-2 px-2.5 rounded-xl bg-[#C8A46A] hover:bg-[#b59157] text-white font-semibold text-xs transition text-center flex items-center justify-center gap-1"
@@ -757,6 +774,26 @@ function AdminApprovalsContent() {
                                 <CreditCard className="w-3.5 h-3.5" />
                                 <span>Tagihan</span>
                               </Link>
+                              <button
+                                onClick={() => handleOpenCancelBooking(b)}
+                                className="py-2 px-2.5 rounded-xl bg-white border border-red-300 hover:bg-red-50 text-red-600 font-semibold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
+                                title="Tolak / Batalkan Booking & Proyek Ini"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>Tolak</span>
+                              </button>
+                            </div>
+                          )}
+
+                          {b.status === 'CANCELLED' && (
+                            <div className="flex items-center gap-2 w-full">
+                              <button
+                                onClick={() => handleConfirmBooking(b)}
+                                className="flex-1 py-2 px-3 rounded-xl bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs transition flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                              >
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Aktifkan Kembali</span>
+                              </button>
                             </div>
                           )}
                         </div>

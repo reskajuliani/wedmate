@@ -22,9 +22,11 @@ import {
   Package,
   ArrowRight,
   PartyPopper,
+  Printer,
 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { buildTasksForBooking } from '@/lib/task-generator';
+import { ChecklistDocumentModal } from '@/components/documents/ChecklistDocumentModal';
 
 const CATEGORIES: WeddingTask['category'][] = [
   'Venue',
@@ -88,6 +90,7 @@ export default function CustomerChecklistPage() {
       : '');
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isChecklistModalOpen, setIsChecklistModalOpen] = useState(false);
 
   // Initial State: prioritize confirmed bookings from demoStore if any
   const [project, setProject] = useState<WeddingProject | null>(() => {
@@ -274,6 +277,16 @@ export default function CustomerChecklistPage() {
               Pantau jadwal hitung mundur hari pernikahan dan progres checklist tugas yang disiapkan oleh tim Wedding Organizer kami.
             </p>
           </div>
+
+          {hasActiveConfirmedProject && (
+            <button
+              onClick={() => setIsChecklistModalOpen(true)}
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-white hover:bg-[#FAF8F5] text-[#1A1A1A] border border-[#E8E2D8] font-semibold text-xs shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+            >
+              <Printer className="w-4 h-4 text-[#C8A46A]" />
+              <span>Cetak Lembar Kerja</span>
+            </button>
+          )}
         </div>
 
         {/* 1. SKELETON LOADER (While fetching initial data) */}
@@ -683,6 +696,16 @@ export default function CustomerChecklistPage() {
           />
         )}
       </div>
+
+      {/* Printable Checklist Worksheet Modal */}
+      <ChecklistDocumentModal
+        isOpen={isChecklistModalOpen}
+        onClose={() => setIsChecklistModalOpen(false)}
+        project={project}
+        tasks={tasks}
+        confirmedBooking={confirmedBooking}
+        clientName={user?.full_name || confirmedBooking?.customer?.full_name || 'Klien Pengantin'}
+      />
     </div>
   );
 }

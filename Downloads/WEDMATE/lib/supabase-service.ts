@@ -871,4 +871,32 @@ export const supabaseService = {
       }
     }
   },
+
+  async cancelProject(projectId: string, reason?: string): Promise<void> {
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'CANCEL_PROJECT', projectId, reason }),
+        });
+      } catch (err) {
+        console.warn('cancelProject API error:', err);
+      }
+    }
+  },
+
+  async restoreProject(bookingId: string): Promise<void> {
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'RESTORE_PROJECT', bookingId }),
+        });
+      } catch (err) {
+        console.warn('restoreProject API error:', err);
+      }
+    }
+  },
 };

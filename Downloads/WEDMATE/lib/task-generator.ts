@@ -219,10 +219,10 @@ export async function cleanupProjectForBooking(supabase: any, bookingId: string)
       }
     }
 
-    // Clean up or mark invoice as CANCELLED so client doesn't see dangling bills
+    // Clean up payment invoice so client doesn't see dangling bills for cancelled booking
     await supabase
       .from('payments')
-      .update({ status: 'CANCELLED', updated_at: new Date().toISOString() })
+      .delete()
       .eq('booking_id', bookingId);
   } catch (err: any) {
     console.warn('cleanupProjectForBooking warning:', err.message);

@@ -34,19 +34,12 @@ import { InvoiceDocumentModal } from '@/components/documents/InvoiceDocumentModa
 export default function CustomerPaymentPage() {
   const { user } = useAuth();
   const customerId = user?.id || '';
-  const effectiveCustomerId =
-    customerId ||
-    (typeof window !== 'undefined'
-      ? localStorage.getItem('wedmate_active_user_id') || localStorage.getItem('wedmate_user_id') || ''
-      : '');
-
-  const [isLoading, setIsLoading] = useState(true);
 
   const [payments, setPayments] = useState<Payment[]>(() => {
-    return effectiveCustomerId ? demoStore.getPayments(effectiveCustomerId) : [];
+    return customerId ? demoStore.getPayments(customerId) : [];
   });
   const [transactions, setTransactions] = useState<PaymentTransaction[]>(() => {
-    return effectiveCustomerId ? demoStore.getTransactions(effectiveCustomerId) : [];
+    return customerId ? demoStore.getTransactions(customerId) : [];
   });
 
   // Clipboard copy state
@@ -84,15 +77,15 @@ export default function CustomerPaymentPage() {
     let isFetching = false;
 
     const refreshData = async () => {
-      if (!effectiveCustomerId) return;
+      if (!customerId) return;
       try {
-        const userPayments = await supabaseService.getPayments(effectiveCustomerId);
+        const userPayments = await supabaseService.getPayments(customerId);
         if (isMounted) setPayments(userPayments);
 
-        const userTxs = await supabaseService.getTransactions(effectiveCustomerId);
+        const userTxs = await supabaseService.getTransactions(customerId);
         if (isMounted) setTransactions(userTxs);
 
-        const userBookings = await supabaseService.getBookings(effectiveCustomerId);
+        const userBookings = await supabaseService.getBookings(customerId);
         const conf = userBookings.find((b) => b.status === 'CONFIRMED');
         if (isMounted) setConfirmedBooking(conf || null);
 
@@ -106,13 +99,11 @@ export default function CustomerPaymentPage() {
         }
       } catch (e) {
         console.warn('Refresh error in customer payments:', e);
-      } finally {
-        if (isMounted) setIsLoading(false);
       }
     };
 
     const executeSmartPoll = async () => {
-      if (!isMounted || !effectiveCustomerId) return;
+      if (!isMounted || !customerId) return;
       if (typeof document !== 'undefined' && document.hidden) return;
       if (isFetching) return;
 
@@ -281,20 +272,7 @@ export default function CustomerPaymentPage() {
             <p className="text-xs text-[#1A1A1A]/70 mt-1">
               Pantau sisa saldo tagihan paket pernikahan, nomor rekening resmi, dan konfirmasi bukti setor transaksi Anda.
             </p>
-            {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+          </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {payments.length > 0 && (
@@ -316,34 +294,8 @@ export default function CustomerPaymentPage() {
                 <span>Unggah Bukti Transfer</span>
               </button>
             )}
-            {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-          {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+          </div>
+        </div>
 
         {/* Toast Notification */}
         {toastMessage && (
@@ -360,20 +312,7 @@ export default function CustomerPaymentPage() {
               <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
             )}
             <span>{toastMessage.text}</span>
-            {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+          </div>
         )}
 
         {/* SECTION 1: BILLING BALANCE CARDS */}
@@ -387,92 +326,9 @@ export default function CustomerPaymentPage() {
                 {payments.length} Invoice Aktif
               </span>
             )}
-            {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+          </div>
 
-          {isLoading && payments.length === 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
-              <div className="bg-white rounded-3xl p-6 h-36 border border-[#E8E2D8] flex flex-col justify-between">
-                <div className="h-4 bg-gray-200 rounded-md w-1/3"></div>
-                <div className="h-8 bg-gray-200 rounded-md w-2/3"></div>
-                <div className="h-3 bg-gray-200 rounded-md w-1/2"></div>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-              <div className="bg-white rounded-3xl p-6 h-36 border border-[#E8E2D8] flex flex-col justify-between">
-                <div className="h-4 bg-gray-200 rounded-md w-1/3"></div>
-                <div className="h-8 bg-gray-200 rounded-md w-2/3"></div>
-                <div className="h-3 bg-gray-200 rounded-md w-1/2"></div>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-              <div className="bg-white rounded-3xl p-6 h-36 border border-[#E8E2D8] flex flex-col justify-between">
-                <div className="h-4 bg-gray-200 rounded-md w-1/3"></div>
-                <div className="h-8 bg-gray-200 rounded-md w-2/3"></div>
-                <div className="h-3 bg-gray-200 rounded-md w-1/2"></div>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-          ) : payments.length === 0 ? (
+          {payments.length === 0 ? (
             <EmptyState
               icon={CreditCard}
               title="Belum ada data tersedia"
@@ -489,37 +345,11 @@ export default function CustomerPaymentPage() {
                 </span>
                 <div className="font-serif text-2xl sm:text-3xl font-bold text-[#1A1A1A]">
                   {formatRupiah(totalBilled)}
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                </div>
                 <p className="text-xs text-gray-500">
                   Total biaya paket wedding yang disepakati
                 </p>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
 
               {/* Sudah Dibayar */}
               <div className="bg-white rounded-3xl p-6 border border-[#E8E2D8] shadow-xs space-y-2">
@@ -528,37 +358,11 @@ export default function CustomerPaymentPage() {
                 </span>
                 <div className="font-serif text-2xl sm:text-3xl font-bold text-emerald-700">
                   {formatRupiah(totalPaid)}
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                </div>
                 <p className="text-xs text-gray-500">
                   Pembayaran yang sudah disetujui admin
                 </p>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
 
               {/* Sisa Saldo */}
               <div className="bg-[#FAF8F5] rounded-3xl p-6 border border-[#C8A46A] shadow-xs space-y-2">
@@ -575,84 +379,19 @@ export default function CustomerPaymentPage() {
                       BELUM LUNAS
                     </span>
                   )}
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                </div>
                 <div className="font-serif text-2xl sm:text-3xl font-bold text-[#C8A46A]">
                   {formatRupiah(totalRemaining)}
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                </div>
                 <p className="text-xs text-gray-600">
                   {totalRemaining === 0
                     ? 'Semua kewajiban tagihan telah selesai.'
                     : 'Dapat dicicil sebelum hari H sesuai termin.'}
                 </p>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
+            </div>
           )}
-          {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+        </div>
 
         {/* SECTION 2: OFFICIAL ACCOUNTS (BCA & DANA) */}
         <div className="space-y-4">
@@ -666,20 +405,7 @@ export default function CustomerPaymentPage() {
             <p className="text-xs text-[#1A1A1A]/70 mt-0.5">
               Pastikan transfer hanya ditujukan ke akun resmi di bawah ini demi keamanan transaksi Anda.
             </p>
-            {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Account 1: BCA */}
@@ -688,70 +414,18 @@ export default function CustomerPaymentPage() {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold font-mono text-sm border border-blue-200">
                     BCA
-                    {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                  </div>
                   <div>
                     <h3 className="font-bold text-sm text-[#1A1A1A]">
                       {OFFICIAL_PAYMENT_ACCOUNTS.BCA.bankName}
                     </h3>
                     <span className="text-[10px] text-gray-400">Transfer Bank &amp; M-Banking</span>
-                    {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                  </div>
+                </div>
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                   Terverifikasi
                 </span>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
 
               {/* Number and Copy */}
               <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8E2D8] flex items-center justify-between">
@@ -765,20 +439,7 @@ export default function CustomerPaymentPage() {
                   <span className="text-xs text-gray-600 block mt-0.5">
                     a/n <strong>{OFFICIAL_PAYMENT_ACCOUNTS.BCA.accountHolder}</strong>
                   </span>
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                </div>
 
                 <button
                   onClick={() =>
@@ -799,20 +460,7 @@ export default function CustomerPaymentPage() {
                     </>
                   )}
                 </button>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
 
               {/* Instructions */}
               <div className="space-y-1.5 text-[11px] text-gray-600">
@@ -827,34 +475,8 @@ export default function CustomerPaymentPage() {
                     </li>
                   ))}
                 </ul>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
+            </div>
 
             {/* Account 2: DANA */}
             <div className="bg-white rounded-3xl p-6 sm:p-7 border border-[#E8E2D8] shadow-xs space-y-5 hover:border-[#C8A46A] transition">
@@ -862,70 +484,18 @@ export default function CustomerPaymentPage() {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-cyan-50 text-cyan-700 flex items-center justify-center font-bold font-mono text-sm border border-cyan-200">
                     DANA
-                    {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                  </div>
                   <div>
                     <h3 className="font-bold text-sm text-[#1A1A1A]">
                       {OFFICIAL_PAYMENT_ACCOUNTS.DANA.bankName}
                     </h3>
                     <span className="text-[10px] text-gray-400">Dompet Digital Resmi</span>
-                    {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                  </div>
+                </div>
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                   Terverifikasi
                 </span>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
 
               {/* Number and Copy */}
               <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-[#E8E2D8] flex items-center justify-between">
@@ -939,20 +509,7 @@ export default function CustomerPaymentPage() {
                   <span className="text-xs text-gray-600 block mt-0.5">
                     a/n <strong>{OFFICIAL_PAYMENT_ACCOUNTS.DANA.accountHolder}</strong>
                   </span>
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                </div>
 
                 <button
                   onClick={() =>
@@ -973,20 +530,7 @@ export default function CustomerPaymentPage() {
                     </>
                   )}
                 </button>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
 
               {/* Instructions */}
               <div className="space-y-1.5 text-[11px] text-gray-600">
@@ -1001,62 +545,10 @@ export default function CustomerPaymentPage() {
                     </li>
                   ))}
                 </ul>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-            {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-          {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* SECTION 3: TRANSACTION HISTORY */}
         <div className="space-y-4">
@@ -1068,20 +560,7 @@ export default function CustomerPaymentPage() {
               <p className="text-xs text-[#1A1A1A]/70 mt-0.5">
                 Daftar bukti pembayaran yang telah Anda serahkan beserta status verifikasi dari tim administrasi.
               </p>
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+            </div>
 
             {payments.length > 0 && totalRemaining > 0 && (
               <button
@@ -1091,40 +570,9 @@ export default function CustomerPaymentPage() {
                 + Unggah Bukti Baru
               </button>
             )}
-            {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+          </div>
 
-          {isLoading && transactions.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-[#E8E2D8] p-6 space-y-4 animate-pulse">
-              <div className="h-16 bg-gray-100 rounded-2xl"></div>
-              <div className="h-16 bg-gray-100 rounded-2xl"></div>
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-          ) : transactions.length === 0 ? (
+          {transactions.length === 0 ? (
             <EmptyState
               icon={Clock}
               title="Belum ada data tersedia"
@@ -1143,20 +591,7 @@ export default function CustomerPaymentPage() {
                     {/* Method badge */}
                     <div className="w-12 h-12 rounded-2xl bg-[#FAF8F5] border border-[#E8E2D8] flex items-center justify-center font-bold text-xs text-[#1A1A1A] shrink-0">
                       {tx.payment_method}
-                      {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                    </div>
 
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1167,37 +602,11 @@ export default function CustomerPaymentPage() {
                         <span className="text-xs text-gray-500">
                           {formatDateTimeIndo(tx.created_at)}
                         </span>
-                        {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                      </div>
 
                       <div className="font-serif text-lg font-bold text-[#C8A46A]">
                         {formatRupiah(tx.amount)}
-                        {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                      </div>
 
                       {tx.notes && (
                         <p className="text-xs text-gray-600 italic">Catatan: {tx.notes}</p>
@@ -1206,49 +615,10 @@ export default function CustomerPaymentPage() {
                       {tx.rejection_reason && tx.status === 'REJECTED' && (
                         <div className="p-2 bg-red-50 text-red-700 text-xs rounded-lg border border-red-200">
                           <strong>Alasan Penolakan:</strong> {tx.rejection_reason}
-                          {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                        </div>
                       )}
-                      {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-                    {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                    </div>
+                  </div>
 
                   <div className="flex items-center gap-3 self-end md:self-center">
                     {/* Status Badge */}
@@ -1277,78 +647,13 @@ export default function CustomerPaymentPage() {
                     >
                       <Eye className="w-4 h-4 text-gray-600" />
                     </button>
-                    {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                  </div>
+                </div>
               ))}
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+            </div>
           )}
-          {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-        {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+        </div>
+      </div>
 
       {/* MODAL: UPLOAD PAYMENT PROOF */}
       {isModalOpen && (
@@ -1362,59 +667,20 @@ export default function CustomerPaymentPage() {
                 <h3 className="font-serif text-xl font-bold text-[#1A1A1A]">
                   Unggah Bukti Transfer
                 </h3>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+            </div>
 
             {formError && (
               <div className="p-3 bg-red-50 text-red-800 border border-red-200 rounded-xl text-xs font-medium flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
                 <span>{formError}</span>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
             )}
 
             <form onSubmit={handleSubmitProof} className="space-y-4">
@@ -1436,20 +702,7 @@ export default function CustomerPaymentPage() {
                     );
                   })}
                 </select>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
 
               {/* Payment Method Selector */}
               <div className="space-y-1">
@@ -1478,34 +731,8 @@ export default function CustomerPaymentPage() {
                   >
                     <span>DANA (085551124373)</span>
                   </button>
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                </div>
+              </div>
 
               {/* Amount Input */}
               <div className="space-y-1">
@@ -1522,20 +749,7 @@ export default function CustomerPaymentPage() {
                   className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-[#C8A46A]"
                   required
                 />
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
 
               {/* File Upload with Preview */}
               <div className="space-y-1">
@@ -1559,40 +773,14 @@ export default function CustomerPaymentPage() {
                           unoptimized
                           className="object-contain"
                         />
-                        {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                      </div>
                       <p className="text-[11px] text-emerald-700 font-semibold">
                         ✓ File dipilih: {proofFileName || 'Bukti Transfer'}
                       </p>
                       <span className="text-[10px] text-gray-400 block">
                         Klik untuk mengganti gambar
                       </span>
-                      {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                    </div>
                   ) : (
                     <div className="space-y-1 py-2">
                       <Upload className="w-8 h-8 text-[#C8A46A] mx-auto" />
@@ -1602,49 +790,10 @@ export default function CustomerPaymentPage() {
                       <p className="text-[10px] text-gray-400">
                         Format JPG, PNG, WEBP (Maks 5MB)
                       </p>
-                      {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                    </div>
                   )}
-                  {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+                </div>
+              </div>
 
               {/* Sender Notes */}
               <div className="space-y-1">
@@ -1658,20 +807,7 @@ export default function CustomerPaymentPage() {
                   placeholder="Contoh: Transfer m-BCA a/n Budi Santoso"
                   className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-[#C8A46A]"
                 />
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E8E2D8]">
@@ -1689,49 +825,10 @@ export default function CustomerPaymentPage() {
                 >
                   {isSubmitting ? 'Mengirim...' : 'Kirim Bukti Pembayaran'}
                 </button>
-                {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+              </div>
             </form>
-            {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-          {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL: IMAGE PREVIEW */}
@@ -1746,20 +843,7 @@ export default function CustomerPaymentPage() {
               >
                 <X className="w-5 h-5" />
               </button>
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+            </div>
             <div className="relative h-80 w-full rounded-2xl overflow-hidden bg-black/5">
               <Image
                 src={previewImage}
@@ -1768,20 +852,7 @@ export default function CustomerPaymentPage() {
                 unoptimized
                 className="object-contain"
               />
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+            </div>
             <div className="flex justify-end">
               <button
                 onClick={() => setPreviewImage(null)}
@@ -1789,49 +860,11 @@ export default function CustomerPaymentPage() {
               >
                 Tutup
               </button>
-              {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-            {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
-          {/* Official Invoice Document Print Modal */}
-      <InvoiceDocumentModal
-        isOpen={isInvoiceModalOpen}
-        onClose={() => setIsInvoiceModalOpen(false)}
-        payment={payments[0] || null}
-        transactions={transactions}
-        clientName={user?.full_name || 'Klien Pengantin'}
-        clientEmail={user?.email || ''}
-        clientPhone={user?.phone || confirmedBooking?.customer?.phone || ''}
-        weddingDate={confirmedBooking?.wedding_date || payments[0]?.due_date}
-        venueName={confirmedBooking?.venue_name}
-        packageName={confirmedBooking?.package?.name || 'Paket Pernikahan WEDMATE'}
-      />
-    </div>
+            </div>
+          </div>
+        </div>
       )}
+
       {/* Official Invoice Document Print Modal */}
       <InvoiceDocumentModal
         isOpen={isInvoiceModalOpen}
