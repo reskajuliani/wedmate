@@ -672,7 +672,22 @@ class DemoStore {
   }
 
   public cancelBooking(id: string, reason?: string): Booking {
-    const updated = this.updateBookingStatus(id, 'CANCELLED');
+    const updated = this.updateBookingStatus(id, 'CANCELLED', reason);
+
+    // Clean up associated local project and tasks
+    const projIndex = this.state.projects.findIndex((p) => p.booking_id === id);
+    if (projIndex !== -1) {
+      const projId = this.state.projects[projIndex].id;
+      this.state.tasks = this.state.tasks.filter((t) => t.project_id !== projId);
+      this.state.projects.splice(projIndex, 1);
+    }
+
+    // Cancel any associated payment invoice
+    const payment = this.state.payments.find((p) => p.booking_id === id);
+    if (payment) {
+      payment.status = 'CANCELLED' as any;
+    }
+
     this.addActivity({
       action: 'BOOKING_CANCELLED',
       entity_type: 'bookings',

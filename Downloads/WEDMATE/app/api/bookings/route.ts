@@ -256,14 +256,18 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    // Local demoStore update
-    if (status === 'CONFIRMED') {
-      demoStore.confirmBooking(id, adminId);
-    } else {
-      demoStore.updateBookingStatus(id, status as BookingStatus, notes);
+    // Local demoStore update (safe in serverless environment)
+    try {
+      if (status === 'CONFIRMED') {
+        demoStore.confirmBooking(id, adminId);
+      } else {
+        demoStore.updateBookingStatus(id, status as BookingStatus, notes);
+      }
+    } catch (localErr: any) {
+      console.warn('demoStore local update skipped in serverless context:', localErr?.message);
     }
 
-    return NextResponse.json({ ok: true, status });
+    return NextResponse.json({ ok: true, status, notes });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
   }
