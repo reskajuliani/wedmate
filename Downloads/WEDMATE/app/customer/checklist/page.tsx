@@ -163,8 +163,13 @@ export default function CustomerChecklistPage() {
         setPendingBooking(pending || null);
         setCancelledBooking(cancelled || null);
 
-        if (userProjects.length > 0) {
-          const currentProject = userProjects[0];
+        // Only show projects associated with an actively CONFIRMED booking
+        const validProjects = confirmed
+          ? userProjects.filter((p) => p.booking_id === confirmed.id || !p.booking_id)
+          : [];
+
+        if (validProjects.length > 0 && confirmed) {
+          const currentProject = validProjects[0];
           setProject(currentProject);
           setTasks(currentProject.tasks || demoStore.getTasksByProjectId(currentProject.id));
         } else if (confirmed) {
@@ -236,8 +241,8 @@ export default function CustomerChecklistPage() {
   }, [effectiveCustomerId, user?.full_name]);
 
   // Active Project Reference (Prioritize project object or confirmed booking)
-  const activeWeddingDate = project?.wedding_date || confirmedBooking?.wedding_date || '';
-  const activeTitle = project?.title || (confirmedBooking ? `Pernikahan ${user?.full_name || 'Pengantin'}` : '');
+  const activeWeddingDate = (project && confirmedBooking) ? (project.wedding_date || confirmedBooking.wedding_date) : '';
+  const activeTitle = (project && confirmedBooking) ? (project.title || `Pernikahan ${user?.full_name || 'Pengantin'}`) : '';
 
   // Real-time Countdown effect
   useEffect(() => {
@@ -266,8 +271,8 @@ export default function CustomerChecklistPage() {
   const todoCount = tasks.filter((t) => t.status === 'TODO').length;
   const progressPercent = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : (project?.progress_percent || 0);
 
-  // If client has a confirmed booking or an active project, that is their definitive wedding project
-  const hasActiveConfirmedProject = Boolean(project || confirmedBooking);
+  // If client has a confirmed booking and an active project, that is their definitive wedding project
+  const hasActiveConfirmedProject = Boolean(project && confirmedBooking);
 
   return (
     <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">

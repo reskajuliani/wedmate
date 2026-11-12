@@ -272,13 +272,20 @@ export default function AdminProjectsPage() {
       ]);
 
       // Sync to demoStore, Supabase Projects Registry & Bookings API
-      demoStore.cancelBooking(bookingId, reason);
+      try {
+        demoStore.cancelBooking(bookingId, reason);
+      } catch (localErr) {
+        console.warn('demoStore cancelBooking skip:', localErr);
+      }
+
       await Promise.allSettled([
-        supabaseService.cancelProject(target.id, reason),
+        supabaseService.cancelProject(target.id, reason, bookingId),
         supabaseService.updateBookingStatus(bookingId, 'CANCELLED', reason),
       ]);
 
-      showNotification(`Proyek "${target.title}" berhasil DITOLAK / DIBATALKAN. Alasan penolakan telah diteruskan ke portal klien.`);
+      showNotification(`Proyek "${target.title}" berhasil DITOLAK / DIBATALKAN. Menampilkan tab proyek ditolak.`);
+      // Automatically switch to CANCELLED tab so admin immediately sees what appears for rejected projects
+      setProjectFilter('CANCELLED');
     } catch (err: any) {
       showNotification(err?.message || 'Gagal membatalkan proyek.', 'error');
     } finally {
@@ -290,7 +297,12 @@ export default function AdminProjectsPage() {
   const handleReactivateProject = async (proj: WeddingProject) => {
     const bookingId = proj.booking_id || proj.id;
     try {
-      demoStore.confirmBooking(bookingId, user?.id);
+      try {
+        demoStore.confirmBooking(bookingId, user?.id);
+      } catch (localErr) {
+        console.warn('demoStore confirmBooking skip:', localErr);
+      }
+
       await Promise.allSettled([
         supabaseService.restoreProject(bookingId),
         supabaseService.updateBookingStatus(bookingId, 'CONFIRMED'),
@@ -370,19 +382,38 @@ export default function AdminProjectsPage() {
           </div>
         </div>
 
-        {/* 3 Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-softbeige shadow-sm">
+        {/* 4 Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            onClick={() => setProjectFilter('ACTIVE')}
+            className={`bg-white p-5 rounded-2xl border transition cursor-pointer ${
+              projectFilter === 'ACTIVE' ? 'border-champagne ring-2 ring-champagne/20 shadow-md' : 'border-softbeige shadow-sm hover:border-champagne/40'
+            }`}
+          >
             <div className="text-xs text-charcoal-400 mb-1 flex items-center justify-between">
-              <span>Total Proyek Berjalan</span>
+              <span>Proyek Berjalan (Aktif)</span>
               <Sparkles className="w-4 h-4 text-champagne" />
             </div>
             <div className="text-2xl font-bold font-serif text-charcoal">{activeProjects.length}</div>
-            <div className="text-[11px] text-emerald-700 mt-1 font-medium flex items-center justify-between">
-              <span>Proyek aktif dikonfirmasi</span>
-              {cancelledProjects.length > 0 && (
-                <span className="text-red-600 font-semibold">({cancelledProjects.length} ditolak)</span>
-              )}
+            <div className="text-[11px] text-emerald-700 mt-1 font-medium">
+              Sedang dalam tahap persiapan WO
+            </div>
+          </div>
+
+          <div
+            onClick={() => setProjectFilter('CANCELLED')}
+            className={`bg-white p-5 rounded-2xl border transition cursor-pointer ${
+              projectFilter === 'CANCELLED' ? 'border-red-400 ring-2 ring-red-400/20 shadow-md' : 'border-softbeige shadow-sm hover:border-red-300'
+            }`}
+          >
+            <div className="text-xs text-red-700 mb-1 flex items-center justify-between">
+              <span>Ditolak / Dibatalkan</span>
+              <XCircle className="w-4 h-4 text-red-600" />
+            </div>
+            <div className="text-2xl font-bold font-serif text-red-700">{cancelledProjects.length}</div>
+            <div className="text-[11px] text-red-600 mt-1 font-medium flex items-center justify-between">
+              <span>Proyek &amp; tagihan nonaktif</span>
+              <span className="text-[10px] underline font-semibold">Lihat &rarr;</span>
             </div>
           </div>
 

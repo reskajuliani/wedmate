@@ -150,18 +150,31 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Action: Reject / Cancel Project
-    if (action === 'CANCEL_PROJECT' && projectId) {
+    if (action === 'CANCEL_PROJECT' && (projectId || payload.bookingId)) {
       const reason = payload.reason || 'Dibatalkan oleh Admin.';
+      let bookingIdToCancel = payload.bookingId || null;
+
       if (isSupabaseConfigured()) {
         try {
           const supabase = createAdminClient();
-          const { data: proj } = await supabase
-            .from('wedding_projects')
-            .select('booking_id')
-            .eq('id', projectId)
-            .maybeSingle();
 
-          if (proj && proj.booking_id) {
+          if (!bookingIdToCancel && projectId) {
+            const { data: proj } = await supabase
+              .from('wedding_projects')
+              .select('id, booking_id')
+              .or(`id.eq.${projectId},booking_id.eq.${projectId}`)
+              .maybeSingle();
+
+            if (proj && proj.booking_id) {
+              bookingIdToCancel = proj.booking_id;
+            } else {
+              // Check if projectId is itself a booking ID
+              const { data: b } = await supabase.from('bookings').select('id').eq('id', projectId).maybeSingle();
+              if (b) bookingIdToCancel = b.id;
+            }
+          }
+
+          if (bookingIdToCancel) {
             await supabase
               .from('bookings')
               .update({
@@ -169,10 +182,12 @@ export async function POST(request: NextRequest) {
                 notes: reason,
                 updated_at: new Date().toISOString(),
               })
-              .eq('id', proj.booking_id);
+              .eq('id', bookingIdToCancel);
 
-            await cleanupProjectForBooking(supabase, proj.booking_id);
-          } else {
+            await cleanupProjectForBooking(supabase, bookingIdToCancel);
+          }
+
+          if (projectId) {
             await supabase.from('wedding_tasks').delete().eq('project_id', projectId);
             await supabase.from('wedding_projects').delete().eq('id', projectId);
           }
@@ -182,9 +197,9 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const proj = demoStore.getProjectById(projectId);
-        if (proj && proj.booking_id) {
-          demoStore.cancelBooking(proj.booking_id, reason);
+        const bId = bookingIdToCancel || (projectId ? demoStore.getProjectById(projectId)?.booking_id : null) || projectId;
+        if (bId) {
+          demoStore.cancelBooking(bId, reason);
         }
       } catch (e: any) {
         console.warn('demoStore.cancelBooking local skip:', e.message);
@@ -317,22 +332,35 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('id');
+    const bookingId = searchParams.get('bookingId');
     const reason = searchParams.get('reason') || 'Dibatalkan oleh Admin.';
 
-    if (!projectId) {
-      return NextResponse.json({ ok: false, error: 'Project ID wajib disertakan.' }, { status: 400 });
+    if (!projectId && !bookingId) {
+      return NextResponse.json({ ok: false, error: 'Project ID atau Booking ID wajib disertakan.' }, { status: 400 });
     }
+
+    let targetBookingId = bookingId;
 
     if (isSupabaseConfigured()) {
       try {
         const supabase = createAdminClient();
-        const { data: proj } = await supabase
-          .from('wedding_projects')
-          .select('booking_id')
-          .eq('id', projectId)
-          .maybeSingle();
 
-        if (proj && proj.booking_id) {
+        if (!targetBookingId && projectId) {
+          const { data: proj } = await supabase
+            .from('wedding_projects')
+            .select('booking_id')
+            .or(`id.eq.${projectId},booking_id.eq.${projectId}`)
+            .maybeSingle();
+
+          if (proj && proj.booking_id) {
+            targetBookingId = proj.booking_id;
+          } else {
+            const { data: b } = await supabase.from('bookings').select('id').eq('id', projectId).maybeSingle();
+            if (b) targetBookingId = b.id;
+          }
+        }
+
+        if (targetBookingId) {
           await supabase
             .from('bookings')
             .update({
@@ -340,10 +368,12 @@ export async function DELETE(request: NextRequest) {
               notes: reason,
               updated_at: new Date().toISOString(),
             })
-            .eq('id', proj.booking_id);
+            .eq('id', targetBookingId);
 
-          await cleanupProjectForBooking(supabase, proj.booking_id);
-        } else {
+          await cleanupProjectForBooking(supabase, targetBookingId);
+        }
+
+        if (projectId) {
           await supabase.from('wedding_tasks').delete().eq('project_id', projectId);
           await supabase.from('wedding_projects').delete().eq('id', projectId);
         }
@@ -352,9 +382,13 @@ export async function DELETE(request: NextRequest) {
       }
     }
 
-    const proj = demoStore.getProjectById(projectId);
-    if (proj && proj.booking_id) {
-      demoStore.cancelBooking(proj.booking_id, reason);
+    try {
+      const bId = targetBookingId || (projectId ? demoStore.getProjectById(projectId)?.booking_id : null) || projectId;
+      if (bId) {
+        demoStore.cancelBooking(bId, reason);
+      }
+    } catch (e: any) {
+      console.warn('demoStore.cancelBooking local skip:', e.message);
     }
 
     return NextResponse.json({ ok: true, message: 'Proyek berhasil dibatalkan.' });

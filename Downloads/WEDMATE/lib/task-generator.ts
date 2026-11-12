@@ -206,6 +206,7 @@ export async function ensureProjectAndTasksForBooking(supabase: any, booking: an
  * Cleans up project & tasks associated with the cancelled booking
  */
 export async function cleanupProjectForBooking(supabase: any, bookingId: string) {
+  if (!supabase || !bookingId) return;
   try {
     const { data: targetProjs } = await supabase
       .from('wedding_projects')
@@ -219,7 +220,7 @@ export async function cleanupProjectForBooking(supabase: any, bookingId: string)
       }
     }
 
-    // Clean up payment invoice so client doesn't see dangling bills for cancelled booking
+    // Clean up payment invoice so client doesn't see dangling bills for cancelled booking (no invalid enum casting)
     await supabase
       .from('payments')
       .delete()

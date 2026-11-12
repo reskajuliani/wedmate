@@ -161,13 +161,7 @@ export const supabaseService = {
         if (res.ok) {
           const json = await res.json();
           if (Array.isArray(json.bookings) && json.bookings.length > 0) {
-            // Keep local demoStore in sync with verified server statuses
-            json.bookings.forEach((serverB: Booking) => {
-              const localB = demoStore.getBookingById(serverB.id);
-              if (localB && localB.status !== serverB.status) {
-                demoStore.updateBookingStatus(serverB.id, serverB.status, serverB.notes || undefined);
-              }
-            });
+            demoStore.setBookings(json.bookings);
             return json.bookings;
           }
         }
@@ -191,7 +185,7 @@ export const supabaseService = {
 
         const { data, error } = await query;
         if (!error && data) {
-          return data.map((b: any) => ({
+          const mapped = data.map((b: any) => ({
             id: b.id,
             customer_id: b.customer_id,
             package_id: b.package_id,
@@ -213,6 +207,8 @@ export const supabaseService = {
               : undefined,
             customer: b.customer || undefined,
           }));
+          demoStore.setBookings(mapped);
+          return mapped;
         }
       } catch (err) {
         console.warn('Supabase getBookings fallback:', err);
@@ -308,7 +304,13 @@ export const supabaseService = {
   },
 
   async updateBookingStatus(id: string, status: BookingStatus, notes?: string): Promise<Booking> {
-    const updated = demoStore.updateBookingStatus(id, status, notes);
+    const validStatus: BookingStatus = (status as string) === 'REJECTED' ? 'CANCELLED' : status;
+    let updated: Booking;
+    try {
+      updated = demoStore.updateBookingStatus(id, validStatus, notes);
+    } catch {
+      updated = { id, status: validStatus, notes } as any;
+    }
 
     // Sync to Server API Registry (uses Admin Client to bypass RLS in Supabase)
     if (typeof window !== 'undefined') {
@@ -316,7 +318,7 @@ export const supabaseService = {
         await fetch('/api/bookings', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, status, notes }),
+          body: JSON.stringify({ id, status: validStatus, notes }),
         });
       } catch (err) {
         console.warn('Sync /api/bookings PATCH error:', err);
@@ -329,7 +331,7 @@ export const supabaseService = {
         await supabase
           .from('bookings')
           .update({
-            status,
+            status: validStatus,
             notes: notes || undefined,
             updated_at: new Date().toISOString(),
           })
@@ -868,13 +870,13 @@ export const supabaseService = {
     }
   },
 
-  async cancelProject(projectId: string, reason?: string): Promise<void> {
+  async cancelProject(projectId: string, reason?: string, bookingId?: string): Promise<void> {
     if (typeof window !== 'undefined') {
       try {
         await fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'CANCEL_PROJECT', projectId, reason }),
+          body: JSON.stringify({ action: 'CANCEL_PROJECT', projectId, bookingId, reason }),
         });
       } catch (err) {
         console.warn('cancelProject API error:', err);

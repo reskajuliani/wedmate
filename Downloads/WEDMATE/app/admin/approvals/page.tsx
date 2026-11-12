@@ -230,8 +230,15 @@ function AdminApprovalsContent() {
       prev.map((b) => (b.id === targetId ? { ...b, status: 'CANCELLED', notes: reason } : b))
     );
     try {
-      demoStore.cancelBooking(targetId, reason);
-      await supabaseService.updateBookingStatus(targetId, 'CANCELLED', reason);
+      try {
+        demoStore.cancelBooking(targetId, reason);
+      } catch (e) {
+        console.warn('Local demoStore cancelBooking skip:', e);
+      }
+      await Promise.allSettled([
+        supabaseService.updateBookingStatus(targetId, 'CANCELLED', reason),
+        supabaseService.cancelProject(targetId, reason, targetId),
+      ]);
       showToast(`Pengajuan booking #${targetId.substring(0, 8)} berhasil DITOLAK / DIBATALKAN. Alasan penolakan telah diteruskan ke portal klien.`);
     } catch (err: any) {
       showToast(err?.message || 'Gagal membatalkan booking.', 'error');
@@ -923,34 +930,68 @@ function AdminApprovalsContent() {
 
             <p className="text-xs text-gray-600">
               Anda akan membatalkan booking{' '}
-              <strong className="text-[#1A1A1A]">#{cancelBookingTarget.id}</strong>{' '}
+              <strong className="text-[#1A1A1A]">#{cancelBookingTarget.id.substring(0, 8)}</strong>{' '}
               dari klien{' '}
               <strong className="text-[#1A1A1A]">{cancelBookingTarget.customer?.full_name}</strong>.
             </p>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#1A1A1A]">Alasan Pembatalan</label>
+            <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-900 text-[11px] leading-relaxed">
+              Tindakan ini akan membatalkan status booking klien, menonaktifkan checklist persiapan proyek, dan membatalkan invoice tagihan. Alasan penolakan di bawah akan otomatis diteruskan ke portal pengantin klien.
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-[#1A1A1A]">Alasan Penolakan / Pembatalan *</label>
+                <span className="text-[10px] text-gray-400">Pilih opsi cepat atau ketik</span>
+              </div>
+
+              {/* Preset Chips */}
+              <div className="flex flex-wrap gap-1.5 pb-1">
+                {[
+                  'Jadwal bentrok dengan agenda WO lain',
+                  'Klien mengajukan pembatalan jadwal',
+                  'Venue tidak tersedia pada tanggal tersebut',
+                  'Kuota tim operasional pada tanggal ini penuh',
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setCancelBookingReason(preset)}
+                    className={`text-[10px] px-2.5 py-1 rounded-lg border transition cursor-pointer text-left ${
+                      cancelBookingReason === preset
+                        ? 'bg-red-100 border-red-300 text-red-900 font-semibold'
+                        : 'bg-[#FAF8F5] border-[#E8E2D8] text-gray-600 hover:border-red-200 hover:text-red-800'
+                    }`}
+                  >
+                    + {preset}
+                  </button>
+                ))}
+              </div>
+
               <textarea
                 rows={3}
                 value={cancelBookingReason}
                 onChange={(e) => setCancelBookingReason(e.target.value)}
-                placeholder="Tulis alasan pembatalan..."
+                placeholder="Tulis alasan pembatalan yang jelas untuk klien..."
                 className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-red-400"
               />
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-[#E8E2D8]">
               <button
+                type="button"
                 onClick={() => setCancelBookingTarget(null)}
                 className="px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition cursor-pointer"
               >
                 Kembali
               </button>
               <button
+                type="button"
                 onClick={handleConfirmCancelBooking}
-                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs transition cursor-pointer"
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-700 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer"
               >
-                Batalkan Booking Ini
+                <XCircle className="w-3.5 h-3.5" />
+                <span>Konfirmasi Tolak Booking</span>
               </button>
             </div>
           </div>

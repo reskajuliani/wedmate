@@ -223,11 +223,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'ID booking dan status wajib disertakan.' }, { status: 400 });
     }
 
+    // Normalize status to valid booking_status enum: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
+    const validStatus = status === 'REJECTED' ? 'CANCELLED' : status;
+
     if (isSupabaseConfigured()) {
       try {
         const supabase = createAdminClient();
         const updatePayload: any = {
-          status,
+          status: validStatus,
           updated_at: new Date().toISOString(),
         };
         if (notes !== undefined) {
@@ -246,9 +249,9 @@ export async function PATCH(request: NextRequest) {
         }
 
         // Trigger project & tasks auto-generation or cleanup strictly on Admin Action
-        if (status === 'CONFIRMED' && updated) {
+        if (validStatus === 'CONFIRMED' && updated) {
           await ensureProjectAndTasksForBooking(supabase, updated);
-        } else if (status === 'CANCELLED' || status === 'REJECTED') {
+        } else if (validStatus === 'CANCELLED') {
           await cleanupProjectForBooking(supabase, id);
         }
       } catch (err: any) {
@@ -258,16 +261,16 @@ export async function PATCH(request: NextRequest) {
 
     // Local demoStore update (safe in serverless environment)
     try {
-      if (status === 'CONFIRMED') {
+      if (validStatus === 'CONFIRMED') {
         demoStore.confirmBooking(id, adminId);
       } else {
-        demoStore.updateBookingStatus(id, status as BookingStatus, notes);
+        demoStore.updateBookingStatus(id, validStatus as BookingStatus, notes);
       }
     } catch (localErr: any) {
       console.warn('demoStore local update skipped in serverless context:', localErr?.message);
     }
 
-    return NextResponse.json({ ok: true, status, notes });
+    return NextResponse.json({ ok: true, status: validStatus, notes });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
   }
