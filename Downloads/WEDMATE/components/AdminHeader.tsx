@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { demoStore } from '@/lib/demo-store';
+import { supabaseService } from '@/lib/supabase-service';
 import {
   HeartHandshake,
   ShieldCheck,
@@ -54,18 +55,42 @@ export function AdminHeader() {
   const [pendingPaymentsCount, setPendingPaymentsCount] = useState(0);
 
   useEffect(() => {
-    const updateBadges = () => {
+    let isMounted = true;
+
+    const updateBadges = async () => {
+      // 1. Initial local state from demoStore
       const users = demoStore.getUsers().filter((u) => u.role === 'CUSTOMER' && u.status === 'PENDING');
       const bookings = demoStore.getBookings().filter((b) => b.status === 'PENDING');
       setPendingApprovalsCount(users.length + bookings.length);
 
       const txs = demoStore.getTransactions().filter((t) => t.status === 'PENDING');
       setPendingPaymentsCount(txs.length);
+
+      // 2. Fresh remote check from Supabase
+      try {
+        const [remoteProfiles, remoteBookings, remotePayments] = await Promise.all([
+          supabaseService.getProfiles(),
+          supabaseService.getBookings(),
+          supabaseService.getPayments(),
+        ]);
+        if (!isMounted) return;
+        const pUsers = remoteProfiles.filter((u) => u.role === 'CUSTOMER' && u.status === 'PENDING');
+        const pBookings = remoteBookings.filter((b) => b.status === 'PENDING');
+        setPendingApprovalsCount(pUsers.length + pBookings.length);
+
+        const pTxs = remotePayments.filter((t: any) => t.status === 'PENDING');
+        setPendingPaymentsCount(pTxs.length);
+      } catch {
+        // demoStore already provides reliable fallback
+      }
     };
 
     updateBadges();
     const unsub = demoStore.subscribe(updateBadges);
-    return unsub;
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, []);
 
   const isActive = (matchers: string[]) => {
