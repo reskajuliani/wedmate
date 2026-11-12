@@ -128,7 +128,9 @@ export async function GET(request: NextRequest) {
   // Calculate live balances for payments based on approved transactions
   const finalPayments = Array.from(pMap.values()).map((payment) => {
     const relatedApprovedTxs = Array.from(tMap.values()).filter(
-      (tx) => tx.payment_id === payment.id && tx.status === 'APPROVED'
+      (tx) =>
+        (tx.payment_id === payment.id || (payment.customer_id && tx.customer_id === payment.customer_id)) &&
+        tx.status === 'APPROVED'
     );
     const sumApproved = relatedApprovedTxs.reduce((sum, tx) => sum + Number(tx.amount), 0);
 
@@ -242,26 +244,32 @@ export async function PATCH(request: NextRequest) {
         // Recalculate payment status in Supabase
         const { data: tx } = await supabase
           .from('payment_transactions')
-          .select('payment_id')
+          .select('payment_id, customer_id')
           .eq('id', transactionId)
           .maybeSingle();
 
-        if (tx && tx.payment_id) {
-          const { data: allApproved } = await supabase
-            .from('payment_transactions')
-            .select('amount')
-            .eq('payment_id', tx.payment_id)
-            .eq('status', 'APPROVED');
+        if (tx) {
+          let targetPaymentId = tx.payment_id;
+          let parentPayment: any = null;
 
-          const totalApproved = (allApproved || []).reduce((sum, item) => sum + Number(item.amount), 0);
+          if (targetPaymentId) {
+            const { data: p } = await supabase.from('payments').select('*').eq('id', targetPaymentId).maybeSingle();
+            parentPayment = p;
+          }
+          if (!parentPayment && tx.customer_id) {
+            const { data: p } = await supabase.from('payments').select('*').eq('customer_id', tx.customer_id).maybeSingle();
+            parentPayment = p;
+            if (parentPayment) targetPaymentId = parentPayment.id;
+          }
 
-          const { data: parentPayment } = await supabase
-            .from('payments')
-            .select('total_amount')
-            .eq('id', tx.payment_id)
-            .maybeSingle();
+          if (parentPayment && targetPaymentId) {
+            const { data: allApproved } = await supabase
+              .from('payment_transactions')
+              .select('amount')
+              .or(`payment_id.eq.${targetPaymentId},customer_id.eq.${tx.customer_id}`)
+              .eq('status', 'APPROVED');
 
-          if (parentPayment) {
+            const totalApproved = (allApproved || []).reduce((sum, item) => sum + Number(item.amount), 0);
             const totalBill = Number(parentPayment.total_amount);
             const remaining = Math.max(totalBill - totalApproved, 0);
             const payStatus = totalApproved >= totalBill && totalBill > 0 ? 'PAID' : totalApproved > 0 ? 'PARTIAL' : 'UNPAID';
@@ -274,7 +282,7 @@ export async function PATCH(request: NextRequest) {
                 status: payStatus,
                 updated_at: new Date().toISOString(),
               })
-              .eq('id', tx.payment_id);
+              .eq('id', targetPaymentId);
           }
         }
       } catch (err: any) {

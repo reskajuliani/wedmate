@@ -72,14 +72,28 @@ export async function GET(request: NextRequest) {
     try {
       const supabase = createAdminClient();
 
-      // 1. Auto-healing: Ensure every existing booking has a project
-      const { data: allBookings } = await supabase
+      // 1. Auto-healing: ONLY for CONFIRMED bookings!
+      const { data: confirmedBookings } = await supabase
         .from('bookings')
         .select('*, customer:profiles(*)')
+        .eq('status', 'CONFIRMED')
         .order('created_at', { ascending: false });
 
-      if (allBookings && allBookings.length > 0) {
-        for (const b of allBookings) {
+      const confirmedIds = new Set((confirmedBookings || []).map((b: any) => b.id));
+
+      // Clean up any projects that belong to non-confirmed bookings
+      const { data: allProjectsInDb } = await supabase.from('wedding_projects').select('id, booking_id');
+      if (allProjectsInDb) {
+        for (const p of allProjectsInDb) {
+          if (p.booking_id && !confirmedIds.has(p.booking_id)) {
+            await supabase.from('wedding_tasks').delete().eq('project_id', p.id);
+            await supabase.from('wedding_projects').delete().eq('id', p.id);
+          }
+        }
+      }
+
+      if (confirmedBookings && confirmedBookings.length > 0) {
+        for (const b of confirmedBookings) {
           const { data: existingProj } = await supabase
             .from('wedding_projects')
             .select('id')

@@ -208,9 +208,15 @@ export default function CustomerPaymentPage() {
     }
   };
 
-  const totalBilled = payments.reduce((acc, p) => acc + p.total_amount, 0);
-  const totalPaid = payments.reduce((acc, p) => acc + p.amount_paid, 0);
-  const totalRemaining = payments.reduce((acc, p) => acc + p.remaining_balance, 0);
+  // Real-time direct calculation of approved transactions sum
+  const approvedTxSum = transactions
+    .filter((tx) => tx.status === 'APPROVED')
+    .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+
+  const totalBilled = payments.reduce((acc, p) => acc + Number(p.total_amount || 0), 0);
+  const rawPaymentsPaid = payments.reduce((acc, p) => acc + Number(p.amount_paid || 0), 0);
+  const totalPaid = Math.max(rawPaymentsPaid, approvedTxSum);
+  const totalRemaining = Math.max(totalBilled - totalPaid, 0);
 
   return (
     <div className="py-8 px-4 sm:px-6 lg:px-8 pb-32">
@@ -635,11 +641,15 @@ export default function CustomerPaymentPage() {
                   onChange={(e) => setSelectedPaymentId(e.target.value)}
                   className="w-full p-3 text-xs bg-[#FAF8F5] border border-[#E8E2D8] rounded-xl focus:outline-none focus:border-[#C8A46A]"
                 >
-                  {payments.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.invoice_number} — Sisa: {formatRupiah(p.remaining_balance)}
-                    </option>
-                  ))}
+                  {payments.map((p) => {
+                    const pPaid = Math.max(Number(p.amount_paid || 0), approvedTxSum);
+                    const pRemaining = Math.max(Number(p.total_amount || 0) - pPaid, 0);
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.invoice_number} — Sisa: {formatRupiah(pRemaining)}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

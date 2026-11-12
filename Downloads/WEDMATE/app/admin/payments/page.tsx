@@ -115,8 +115,32 @@ export default function AdminPaymentVerificationPage() {
   // Handle Approve Transaction
   const handleApprove = async (tx: PaymentTransaction) => {
     try {
+      // Optimistically update transactions & payments in local state
+      setAllTransactions((prev) =>
+        prev.map((t) =>
+          t.id === tx.id
+            ? { ...t, status: 'APPROVED', verified_by: adminId, verified_at: new Date().toISOString() }
+            : t
+        )
+      );
+      setAllPayments((prev) =>
+        prev.map((p) => {
+          if (p.id === tx.payment_id || (tx.customer_id && p.customer_id === tx.customer_id)) {
+            const newPaid = Number(p.amount_paid || 0) + Number(tx.amount || 0);
+            const newRemaining = Math.max(Number(p.total_amount || 0) - newPaid, 0);
+            return {
+              ...p,
+              amount_paid: newPaid,
+              remaining_balance: newRemaining,
+              status: newPaid >= Number(p.total_amount || 0) && Number(p.total_amount || 0) > 0 ? 'PAID' : 'PARTIAL',
+            };
+          }
+          return p;
+        })
+      );
+
       const updatedTx = await supabaseService.verifyTransaction(tx.id, 'APPROVED', adminId);
-      const payment = allPayments.find((p) => p.id === tx.payment_id);
+      const payment = allPayments.find((p) => p.id === tx.payment_id || (tx.customer_id && p.customer_id === tx.customer_id));
 
       setActionFeedback({
         type: 'success',
@@ -154,6 +178,13 @@ export default function AdminPaymentVerificationPage() {
     }
 
     try {
+      setAllTransactions((prev) =>
+        prev.map((t) =>
+          t.id === rejectModalTx.id
+            ? { ...t, status: 'REJECTED', rejection_reason: rejectionReason.trim(), verified_by: adminId, verified_at: new Date().toISOString() }
+            : t
+        )
+      );
       await supabaseService.verifyTransaction(rejectModalTx.id, 'REJECTED', adminId, rejectionReason.trim());
       setActionFeedback({
         type: 'success',

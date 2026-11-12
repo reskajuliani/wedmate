@@ -686,6 +686,11 @@ class DemoStore {
   // ================= PROJECTS & TASKS =================
   public getProjects(customerId?: string): WeddingProject[] {
     let list = this.state.projects;
+    // Only return projects associated with confirmed bookings
+    const confirmedBookingIds = new Set(
+      this.state.bookings.filter((b) => b.status === 'CONFIRMED').map((b) => b.id)
+    );
+    list = list.filter((p) => !p.booking_id || confirmedBookingIds.has(p.booking_id));
     if (customerId) {
       list = list.filter((p) => p.customer_id === customerId);
     }
@@ -776,11 +781,28 @@ class DemoStore {
     if (customerId) {
       list = list.filter((p) => p.customer_id === customerId);
     }
-    return list.map((p) => ({
-      ...p,
-      booking: this.getBookingById(p.booking_id),
-      transactions: this.getTransactionsByPaymentId(p.id),
-    }));
+    return list.map((p) => {
+      // Dynamically calculate paid amount from all approved transactions matching payment_id OR customer_id
+      const approvedTxs = this.state.transactions.filter(
+        (t) =>
+          (t.payment_id === p.id || (p.customer_id && t.customer_id === p.customer_id)) &&
+          t.status === 'APPROVED'
+      );
+      const totalApproved = approvedTxs.reduce((sum, item) => sum + item.amount, 0);
+      const paid = Math.max(Number(p.amount_paid) || 0, totalApproved);
+      const total = Number(p.total_amount) || 0;
+      const remaining = Math.max(total - paid, 0);
+      const status = paid >= total && total > 0 ? 'PAID' : paid > 0 ? 'PARTIAL' : 'UNPAID';
+
+      return {
+        ...p,
+        amount_paid: paid,
+        remaining_balance: remaining,
+        status: status as any,
+        booking: this.getBookingById(p.booking_id),
+        transactions: this.getTransactionsByPaymentId(p.id),
+      };
+    });
   }
 
   public getPaymentById(id: string): Payment | undefined {
@@ -858,17 +880,22 @@ class DemoStore {
     tx.updated_at = new Date().toISOString();
 
     // Atomic recalculation of the parent Payment
-    const payment = this.state.payments.find((p) => p.id === tx.payment_id);
+    let payment = this.state.payments.find((p) => p.id === tx.payment_id);
+    if (!payment && tx.customer_id) {
+      payment = this.state.payments.find((p) => p.customer_id === tx.customer_id);
+    }
     if (payment) {
       const approvedTxs = this.state.transactions.filter(
-        (t) => t.payment_id === payment.id && t.status === 'APPROVED'
+        (t) =>
+          (t.payment_id === payment.id || (payment.customer_id && t.customer_id === payment.customer_id)) &&
+          t.status === 'APPROVED'
       );
       const totalApproved = approvedTxs.reduce((sum, item) => sum + item.amount, 0);
 
       payment.amount_paid = totalApproved;
       payment.remaining_balance = Math.max(payment.total_amount - totalApproved, 0);
 
-      if (payment.amount_paid >= payment.total_amount) {
+      if (payment.amount_paid >= payment.total_amount && payment.total_amount > 0) {
         payment.status = 'PAID';
       } else if (payment.amount_paid > 0) {
         payment.status = 'PARTIAL';
